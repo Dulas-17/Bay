@@ -1,71 +1,320 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>BayWatch</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="stylesheet" href="0.css">
-<link rel="apple-touch-icon" sizes="180x180" href="Images/BW.png">
-<link rel="icon" type="image/png" sizes="48x48" href="Images/BW.png">
-<link rel="icon" type="image/x-icon" href="Images/BW.png">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DULAS Image Format Demo (JS)</title>
+<style>
+  :root { --bg:#0b0f14; --card:#121821; --muted:#9fb0c3; --ink:#e7eef7; --accent:#5ad; }
+  body { margin:0; font-family:system-ui,Segoe UI,Roboto,Inter,Arial; background:var(--bg); color:var(--ink); }
+  header { padding:1rem 1.25rem; border-bottom:1px solid #1e2a38; }
+  header h1 { margin:0; font-size:1.25rem; letter-spacing:.02em; }
+  main { padding:1rem; display:grid; gap:1rem; grid-template-columns:1fr; }
+  @media (min-width:900px){ main{ grid-template-columns:1fr 1fr; } }
+  .card { background:var(--card); border:1px solid #1e2a38; border-radius:16px; padding:1rem; box-shadow:0 6px 30px rgba(0,0,0,.25); }
+  .card h2 { margin:.25rem 0 1rem; font-size:1.05rem; color:var(--muted); }
+  .row { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; }
+  input[type=file] { color:var(--ink); }
+  button { background:var(--accent); color:#05131f; border:0; padding:.65rem .9rem; border-radius:12px; font-weight:600; cursor:pointer; }
+  button.secondary { background:#1f2a38; color:var(--ink); }
+  .stat { font-size:.9rem; color:var(--muted); }
+  canvas { max-width:100%; background:#0002; border-radius:12px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+</style>
 </head>
 <body>
-
-
-  <nav>
-    <button onclick="showSection('home')">Home</button>
-    <button onclick="showSection('movies')">Movies</button>
-    <button onclick="showSection('series')">Series</button>
-    <button onclick="showWatchLater()">Watch Later</button>
-  </nav>
-
-   
-<div id="home" class="section">
-    <h1>Baywatch</h1>
-    <p>NB:The page is still under development</p>
-    <p>We highly advice you to dawnload Google drive which will make you watching experience better and watch movies or shows in their highest quality and it will provide additional features and you have to do is have Google drive then when you watch a movie or show press the black box on the top right to have all that, thank you!</p>
-  </div>
-
-
-  <div id="series" class="section">
-    <h2>Shows</h2>
-    <div class="search-container"> <div class="search-box">
-            <input type="text" id="seriesSearch" placeholder="Search for a series...">
-            <button class="search-button" onclick="searchContent('series')">Search</button>
-        </div>
-        <div id="seriesSuggestions" class="suggestions-container"></div>
+<header><h1>DULAS — Custom Lossless Image Format (JavaScript encoder/decoder)</h1></header>
+<main>
+  <!-- ENCODE -->
+  <section class="card">
+    <h2>Encode image ➜ .dulas</h2>
+    <div class="row">
+      <input type="file" id="encodeInput" accept="image/*" />
+      <button id="encodeBtn" disabled>Encode & Download .dulas</button>
     </div>
+    <p class="stat" id="encodeStat">No image loaded.</p>
+    <canvas id="encodeCanvas"></canvas>
+  </section>
 
-    <div class="genre-buttons" id="seriesGenreButtons"></div>
-    <div id="seriesList" class="series-grid"></div>
-    <div id="seriesDetails" class="series-details" style="display: none;"></div>
-  </div>
-
-  <div id="movies" class="section">
-    <h2>Movies</h2>
-    <div class="search-container"> <div class="search-box">
-            <input type="text" id="movieSearch" placeholder="Search for a movie...">
-            <button class="search-button" onclick="searchContent('movies')">Search</button>
-        </div>
-        <div id="movieSuggestions" class="suggestions-container"></div>
+  <!-- DECODE -->
+  <section class="card">
+    <h2>Decode .dulas ➜ preview / PNG</h2>
+    <div class="row">
+      <input type="file" id="decodeInput" accept=".dulas,application/octet-stream" />
+      <button id="exportPngBtn" class="secondary" disabled>Export decoded as PNG</button>
     </div>
-    <div class="genre-buttons" id="movieGenreButtons"></div>
-    <div id="movieList" class="series-grid"></div>
-    <div id="movieDetails" class="series-details" style="display: none;"></div>
-  </div>
+    <p class="stat mono" id="decodeStat">No .dulas loaded.</p>
+    <canvas id="decodeCanvas"></canvas>
+  </section>
 
-  <div id="watchLater" class="section">
-    <h2>Your Watch Later List</h2>
-    <div id="watchLaterList" class="series-grid"></div>
-  </div>
+  <!-- SPEC -->
+  <section class="card" style="grid-column:1/-1">
+    <h2>Format spec (DULAS v1)</h2>
+    <pre class="mono" style="white-space:pre-wrap; margin:0">
+Header (16 bytes):
+- magic[5]   = 'D','U','L','A','S'
+- version[1] = 0x01
+- width[4]   = uint32 LE
+- height[4]  = uint32 LE
+- channels[1]= 0x04  (RGBA)
+- depth[1]   = 0x08  (8 bits per channel)
+- comp[1]    = 0x01  (RLE of repeated pixels)
 
-  <div id="videoFullScreen">
-    <button onclick="closeFullScreen()">Back</button>
-    <iframe src="" allowfullscreen></iframe>
-  </div>
+Payload:
+- stream of opcodes:
+  0x00 + [R,G,B,A]         → write raw pixel, update prev
+  0x01 + [count: uint16LE] → repeat previous pixel 'count' more times
+Encoded order: left→right, top→bottom.
+    </pre>
+  </section>
+</main>
 
-<script src="s.js"></script>
-<script src="m.js"></script>
-<script src="8.js"></script>
+<script>
+// ---------- Helpers ----------
+const MAGIC = [0x44,0x55,0x4C,0x41,0x53]; // "DULAS"
+const VERSION = 1;
+
+function writeU16LE(arr, n){ arr.push(n & 255, (n>>>8) & 255); }
+function writeU32LE(arr, n){
+  arr.push(n & 255, (n>>>8)&255, (n>>>16)&255, (n>>>24)&255);
+}
+function readU16LE(view, o){ return view.getUint16(o, true); }
+function readU32LE(view, o){ return view.getUint32(o, true); }
+
+function pixelsEqual(p, q){
+  return p[0]===q[0] && p[1]===q[1] && p[2]===q[2] && p[3]===q[3];
+}
+
+function chunkedRepeatBytes(arr, pixel, count){
+  // Emit RLE repeats in chunks up to 65535
+  let remaining = count;
+  while(remaining > 0){
+    const n = Math.min(remaining, 65535);
+    arr.push(0x01); // RLE opcode
+    writeU16LE(arr, n);
+    remaining -= n;
+  }
+}
+
+// ---------- ENCODER ----------
+/**
+ * Encode ImageData to DULAS format (Uint8Array)
+ * Simple lossless codec: raw RGBA + repeated-pixel RLE
+ */
+function encodeDULAS(imageData){
+  const {width, height, data} = imageData;
+  const out = [];
+  // Header
+  out.push(...MAGIC);
+  out.push(VERSION);
+  writeU32LE(out, width);
+  writeU32LE(out, height);
+  out.push(4); // channels RGBA
+  out.push(8); // 8-bit
+  out.push(1); // compression: RLE v1
+
+  const totalPx = width * height;
+  if(totalPx === 0) return new Uint8Array(out);
+
+  let i = 0; // index in data (bytes)
+  // First pixel: raw
+  let prev = [data[0], data[1], data[2], data[3]];
+  out.push(0x00, prev[0], prev[1], prev[2], prev[3]);
+  i += 4;
+
+  let runLen = 0; // number of repeats of prev AFTER first occurrence
+  let pixelsWritten = 1;
+
+  for(; pixelsWritten < totalPx; pixelsWritten++, i += 4){
+    const cur = [data[i], data[i+1], data[i+2], data[i+3]];
+    if(pixelsEqual(cur, prev)){
+      runLen++;
+      // If run hits max representable, flush
+      if(runLen === 65535){
+        chunkedRepeatBytes(out, prev, runLen);
+        runLen = 0;
+      }
+    } else {
+      // Flush any pending run of previous pixel
+      if(runLen > 0){
+        chunkedRepeatBytes(out, prev, runLen);
+        runLen = 0;
+      }
+      // Emit new raw pixel
+      out.push(0x00, cur[0], cur[1], cur[2], cur[3]);
+      prev = cur;
+    }
+  }
+  // Flush tail run
+  if(runLen > 0){
+    chunkedRepeatBytes(out, prev, runLen);
+  }
+
+  return new Uint8Array(out);
+}
+
+// ---------- DECODER ----------
+/**
+ * Decode DULAS bytes to ImageData
+ * Returns { imageData, width, height }
+ */
+function decodeDULAS(bytes){
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+
+  // Validate header
+  let off = 0;
+  for(let i=0;i<5;i++){
+    if(u8[off+i] !== MAGIC[i]) throw new Error("Not a DULAS file (bad magic).");
+  }
+  off += 5;
+  const version = u8[off++]; if(version !== VERSION) throw new Error(`Unsupported DULAS version ${version}.`);
+  const width  = readU32LE(view, off); off += 4;
+  const height = readU32LE(view, off); off += 4;
+  const channels = u8[off++]; if(channels !== 4) throw new Error("Unsupported channels (expected RGBA).");
+  const depth = u8[off++]; if(depth !== 8) throw new Error("Unsupported bit depth (expected 8).");
+  const comp  = u8[off++]; if(comp !== 1) throw new Error("Unsupported compression (expected RLE=1).");
+
+  const totalPx = width * height;
+  const out = new Uint8ClampedArray(totalPx * 4);
+  let px = 0;
+  let prev = [0,0,0,0];
+
+  while(off < u8.length && px < totalPx){
+    const op = u8[off++];
+    if(op === 0x00){
+      // raw pixel
+      const r = u8[off++], g = u8[off++], b = u8[off++], a = u8[off++];
+      out[px*4+0]=r; out[px*4+1]=g; out[px*4+2]=b; out[px*4+3]=a;
+      prev = [r,g,b,a];
+      px++;
+    } else if(op === 0x01){
+      // repeat prev N times
+      const count = readU16LE(view, off); off += 2;
+      if(px===0) throw new Error("RLE run appears before first raw pixel.");
+      for(let k=0;k<count && px<totalPx;k++, px++){
+        out[px*4+0]=prev[0]; out[px*4+1]=prev[1];
+        out[px*4+2]=prev[2]; out[px*4+3]=prev[3];
+      }
+    } else {
+      throw new Error(`Unknown opcode 0x${op.toString(16)}`);
+    }
+  }
+  if(px !== totalPx) throw new Error(`Decoded pixels ${px} != expected ${totalPx}. File may be truncated or corrupt.`);
+
+  return { imageData: new ImageData(out, width, height), width, height };
+}
+
+// ---------- UI Wiring ----------
+const encIn   = document.getElementById('encodeInput');
+const encBtn  = document.getElementById('encodeBtn');
+const encCvs  = document.getElementById('encodeCanvas');
+const encStat = document.getElementById('encodeStat');
+
+const decIn   = document.getElementById('decodeInput');
+const decBtn  = document.getElementById('exportPngBtn');
+const decCvs  = document.getElementById('decodeCanvas');
+const decStat = document.getElementById('decodeStat');
+
+let lastDecodedCanvasURL = null;
+
+encIn.addEventListener('change', async () => {
+  const file = encIn.files?.[0];
+  if(!file){ encBtn.disabled = true; encStat.textContent = 'No image loaded.'; return; }
+  const bmp = await loadImageToBitmap(file);
+  drawToCanvas(bmp, encCvs);
+  encBtn.disabled = false;
+  encStat.textContent = `Loaded: ${file.name} — ${bmp.width}×${bmp.height}`;
+});
+
+encBtn.addEventListener('click', async () => {
+  const ctx = encCvs.getContext('2d', { willReadFrequently: true });
+  if(!ctx){ alert('Canvas not ready'); return; }
+  const { width, height } = encCvs;
+  const imgData = ctx.getImageData(0, 0, width, height);
+
+  const dulas = encodeDULAS(imgData);
+  const rawSize = width * height * 4;
+  const ratio = (dulas.byteLength / rawSize);
+  encStat.textContent = `Encoded DULAS v1 — size: ${formatBytes(dulas.byteLength)} (raw RGBA: ${formatBytes(rawSize)}, ratio: ${ratio.toFixed(3)}x)`;
+
+  const blob = new Blob([dulas], { type: 'application/octet-stream' });
+  downloadBlob(blob, suggestName('image', 'dulas'));
+});
+
+decIn.addEventListener('change', async () => {
+  const file = decIn.files?.[0];
+  if(!file){ decBtn.disabled = true; decStat.textContent = 'No .dulas loaded.'; return; }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  try{
+    const { imageData, width, height } = decodeDULAS(bytes);
+    decCvs.width = width; decCvs.height = height;
+    const ctx = decCvs.getContext('2d');
+    ctx.putImageData(imageData, 0, 0);
+    decBtn.disabled = false;
+    decStat.textContent = `Decoded: ${file.name} — ${width}×${height} — RGBA ${formatBytes(width*height*4)}`;
+    lastDecodedCanvasURL = null;
+  }catch(err){
+    decBtn.disabled = true;
+    decStat.textContent = `Failed to decode: ${err.message}`;
+    console.error(err);
+  }
+});
+
+decBtn.addEventListener('click', () => {
+  if(!decCvs.width || !decCvs.height){ return; }
+  decCvs.toBlob((blob) => {
+    if(!blob) return;
+    downloadBlob(blob, suggestName('decoded', 'png'));
+  }, 'image/png');
+});
+
+// ---------- Canvas/Image helpers ----------
+async function loadImageToBitmap(file){
+  // Prefer createImageBitmap for speed
+  const blobURL = URL.createObjectURL(file);
+  try {
+    const bmp = await createImageBitmap(await (await fetch(blobURL)).blob());
+    URL.revokeObjectURL(blobURL);
+    return bmp;
+  } catch {
+    URL.revokeObjectURL(blobURL);
+    // Fallback via <img>
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(createImageBitmap(img));
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  }
+}
+function drawToCanvas(bitmap, canvas){
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0);
+}
+
+function downloadBlob(blob, name){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 0);
+}
+function suggestName(base, ext){
+  const ts = new Date().toISOString().replace(/[:.]/g,'-');
+  return `${base}-${ts}.${ext}`;
+}
+function formatBytes(n){
+  const units = ['B','KB','MB','GB']; let i=0; let v=n;
+  while(v>=1024 && i<units.length-1){ v/=1024; i++; }
+  return `${v.toFixed(v<10 && i>0 ? 2:1)} ${units[i]}`;
+}
+</script>
 </body>
 </html>
