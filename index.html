@@ -1,296 +1,214 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>DULAS — Encoder</title>
-<style>
-  :root{
-    --bg1:#14142b; --bg2:#2b2a59;
-    --card: rgba(255,255,255,0.06);
-    --accent:#7c5cff;
-    --accent-2:#00d4ff;
-    --btn:#00c6ff;
-    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-  }
-  body{
-    margin:0; min-height:100vh;
-    background: linear-gradient(180deg,var(--bg1),var(--bg2));
-    color:#eaf0ff; display:flex; align-items:center; justify-content:center;
-    padding:18px;
-  }
-  .wrap{
-    width:100%; max-width:920px; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.1));
-    border-radius:14px; padding:18px; box-shadow: 0 8px 40px rgba(2,6,23,0.6);
-  }
-  header{display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap}
-  h1{margin:0; font-size:20px; letter-spacing:0.2px}
-  .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-  select,input[type="file"]{padding:10px 12px; border-radius:10px; border:none; background:var(--card); color:inherit;}
-  input[type="password"]{padding:10px 12px; border-radius:10px; border:none; background:transparent; border:1px solid rgba(255,255,255,0.06); color:inherit;}
-  button.primary{
-    background:linear-gradient(90deg,var(--accent),var(--accent-2)); color:#012; border:none; padding:10px 16px; border-radius:10px; cursor:pointer;
-    box-shadow: 0 6px 18px rgba(124,92,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.12);
-  }
-  .main{display:flex; gap:16px; margin-top:14px; flex-wrap:wrap}
-  .left{flex:1; min-width:240px}
-  .right{width:360px; max-width:100%; background:rgba(255,255,255,0.02); padding:12px; border-radius:12px; height:420px; overflow:auto}
-  .file-list{display:flex; flex-direction:column; gap:10px}
-  .file-item{display:flex; gap:10px; align-items:center; background:rgba(0,0,0,0.25); padding:8px; border-radius:8px}
-  .thumb{width:52px; height:52px; border-radius:8px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:rgba(255,255,255,0.03)}
-  .thumb img{width:100%; height:100%; object-fit:cover}
-  .meta{flex:1; min-width:0}
-  .meta .name{font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-  .meta .sub{font-size:12px; opacity:0.7}
-  .download-links{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
-  a.dl{padding:8px 12px; border-radius:8px; background:linear-gradient(90deg,#e9f0ff, #c8e9ff); color:#013; text-decoration:none; font-weight:600; display:inline-block}
-  .hint{font-size:13px; opacity:0.8}
-  .footer{margin-top:12px; display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap}
-  @media (max-width:700px){
-    .main{flex-direction:column}
-    .right{height:320px}
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DULAS Decoder</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f5;
+      color: #333;
+      text-align: center;
+    }
+    header {
+      background: #222;
+      color: #fff;
+      padding: 1rem;
+      font-size: 1.2rem;
+    }
+    .container {
+      max-width: 600px;
+      margin: 2rem auto;
+      padding: 1rem;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .section {
+      margin: 1.5rem 0;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: bold;
+    }
+    input, button {
+      padding: 0.6rem;
+      font-size: 1rem;
+      margin: 0.3rem 0;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    #fileList {
+      margin-top: 1rem;
+      text-align: left;
+      font-size: 0.9rem;
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 0.5rem;
+      background: #fafafa;
+    }
+    .file-item {
+      margin: 0.3rem 0;
+      padding: 0.3rem;
+      border-bottom: 1px solid #eee;
+    }
+    .download-link {
+      display: block;
+      margin: 0.5rem 0;
+      color: #007bff;
+      text-decoration: none;
+      word-break: break-all;
+    }
+    .download-link:hover {
+      text-decoration: underline;
+    }
+    #password-container {
+      display: none;
+    }
+    @media (max-width: 600px) {
+      .container {
+        margin: 1rem;
+        padding: 1rem;
+      }
+    }
+  </style>
 </head>
 <body>
-  <div class="wrap" role="main">
-    <header>
-      <div>
-        <h1>DULAS Encoder</h1>
-        <div class="hint">Create a private .dls container (images & audio). Up to 10 files</div>
-      </div>
-
-      <div class="controls" aria-hidden="false">
-        <label for="typeSelect" class="hint">Type:</label>
-        <select id="typeSelect" aria-label="Choose type">
-          <option value="image">Images</option>
-          <option value="audio">Audio</option>
-        </select>
-
-        <input id="fileInput" type="file" multiple aria-label="Choose files (up to 10)"/>
-
-        <input id="pass" type="password" placeholder="Optional password (leave blank)" aria-label="password">
-
-        <button class="primary" id="encodeBtn">Encode → .dls</button>
-      </div>
-    </header>
-
-    <div class="main">
-      <div class="left">
-        <div style="background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent); padding:12px; border-radius:12px;">
-          <strong>Selected files</strong>
-          <div id="selectedArea" style="margin-top:10px">
-            <div class="hint">Choose images or audio. Thumbnails appear here.</div>
-          </div>
-        </div>
-
-        <div style="margin-top:10px">
-          <button id="clearBtn" style="padding:10px;border-radius:10px;border:none;background:#333;color:#fff">Clear selection</button>
-        </div>
-
-      </div>
-
-      <aside class="right" aria-live="polite">
-        <strong>Output & Downloads</strong>
-        <div id="outputArea" style="margin-top:10px">
-          <div class="hint">When encoding completes, download links will appear here.</div>
-        </div>
-      </aside>
+  <header>DULAS Decoder</header>
+  <div class="container">
+    <div class="section">
+      <label>Choose Mode:</label>
+      <input type="radio" name="mode" value="image"> Image
+      <input type="radio" name="mode" value="audio"> Audio
     </div>
 
-    <div class="footer">
-      <div class="hint">DULAS format v1 — opaque binary container</div>
-      <div class="hint">Files will be packaged individually (one .dls per original file)</div>
+    <div class="section">
+      <label>Select DLS Files (max 10):</label>
+      <input type="file" id="fileInput" multiple>
+      <div id="fileList"></div>
+    </div>
+
+    <div class="section">
+      <button onclick="analyzeFiles()">Analyze</button>
+    </div>
+
+    <div class="section" id="password-container">
+      <label>Password Required:</label>
+      <input type="password" id="password">
+    </div>
+
+    <div class="section">
+      <button onclick="decodeFiles()">Decode & Download</button>
+      <div id="downloadLinks"></div>
     </div>
   </div>
 
 <script>
-/* Utility: text <-> bytes */
-const enc = new TextEncoder();
-const dec = new TextDecoder();
+let fileData = [];
 
-/* Build a simple deterministic keystream from password (demo-grade).
-   It repeats/rotates password bytes and xors with a simple counter — deterministic, fast. */
-function buildKeystream(password, length){
-  if(!password) return null;
-  const pbytes = enc.encode(password);
-  const out = new Uint8Array(length);
-  let s = 0x9e; // seed
-  for(let i=0;i<length;i++){
-    const pb = pbytes[i % pbytes.length];
-    // mix with a tiny PRNG-ish step
-    s = (s + pb + (i & 0xff)) & 0xff;
-    out[i] = (pb ^ s);
-  }
-  return out;
-}
+function analyzeFiles() {
+  const files = document.getElementById("fileInput").files;
+  if (files.length === 0) return alert("Please select files.");
+  if (files.length > 10) return alert("You can select up to 10 files.");
 
-/* Create a single .dls file as Uint8Array with structure:
-   [MAGIC 'DULAS' 5 bytes][VERSION 1 byte][TYPE 1 byte:1=image,2=audio]
-   [FLAG byte: bit0=passwordProtected]
-   [nameLen 2 bytes big-endian][nameBytes UTF-8]
-   [metaLen 4 bytes big-endian][metaBytes UTF-8]
-   [contentBytes...]  (if passwordProtected -> content was XORed with keystream)
-*/
-function packDulas(fileName, fileType, metaObj, contentBytes, password){
-  const MAGIC = 'DULAS';
-  const nameBytes = enc.encode(fileName);
-  const metaStr = JSON.stringify(metaObj);
-  const metaBytes = enc.encode(metaStr);
+  fileData = [];
+  const passwordContainer = document.getElementById("password-container");
+  passwordContainer.style.display = "none";
 
-  const flags = password ? 1 : 0;
-  const typeByte = (fileType === 'image') ? 1 : 2;
-
-  // encrypt contentBytes if password
-  let finalContent = contentBytes;
-  if(password){
-    const ks = buildKeystream(password, contentBytes.length);
-    finalContent = new Uint8Array(contentBytes.length);
-    for(let i=0;i<contentBytes.length;i++) finalContent[i] = contentBytes[i] ^ ks[i];
-  }
-
-  const total =
-    5 + 1 + 1 + 1 + 2 + nameBytes.length + 4 + metaBytes.length + finalContent.length;
-
-  const out = new Uint8Array(total);
-  let p=0;
-  // MAGIC
-  for(let i=0;i<5;i++) out[p++]=MAGIC.charCodeAt(i);
-  out[p++] = 1; // version
-  out[p++] = typeByte;
-  out[p++] = flags & 0xff;
-  // name len (2 bytes big-endian)
-  out[p++] = (nameBytes.length >> 8) & 0xff;
-  out[p++] = nameBytes.length & 0xff;
-  out.set(nameBytes, p); p += nameBytes.length;
-  // meta len (4 bytes BE)
-  out[p++] = (metaBytes.length >>> 24) & 0xff;
-  out[p++] = (metaBytes.length >>> 16) & 0xff;
-  out[p++] = (metaBytes.length >>> 8) & 0xff;
-  out[p++] = (metaBytes.length) & 0xff;
-  out.set(metaBytes, p); p += metaBytes.length;
-  // content
-  out.set(finalContent, p); p += finalContent.length;
-  return out;
-}
-
-/* Helper to convert ArrayBuffer to Blob download link */
-function blobToLink(uint8arr, suggestedName){
-  const blob = new Blob([uint8arr], {type: 'application/octet-stream'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = suggestedName; a.className='dl';
-  a.textContent = `Download ${suggestedName}`;
-  return a;
-}
-
-/* UI wiring */
-const fileInput = document.getElementById('fileInput');
-const typeSelect = document.getElementById('typeSelect');
-const passInput = document.getElementById('pass');
-const encodeBtn = document.getElementById('encodeBtn');
-const selectedArea = document.getElementById('selectedArea');
-const outputArea = document.getElementById('outputArea');
-const clearBtn = document.getElementById('clearBtn');
-
-let currentFiles = [];
-
-fileInput.addEventListener('change', e=>{
-  const files = Array.from(e.target.files).slice(0,10); // cap 10
-  currentFiles = files;
-  renderSelected();
-});
-
-typeSelect.addEventListener('change', ()=>{ renderSelected(); });
-
-clearBtn.addEventListener('click', ()=>{
-  currentFiles = [];
-  fileInput.value = '';
-  renderSelected();
-  outputArea.innerHTML = '<div class="hint">Cleared.</div>';
-});
-
-function renderSelected(){
-  if(currentFiles.length===0){
-    selectedArea.innerHTML = '<div class="hint">Choose images or audio. Thumbnails will appear here.</div>';
-    return;
-  }
-  const list = document.createElement('div');
-  list.className = 'file-list';
-  currentFiles.forEach((f, idx)=>{
-    const item = document.createElement('div'); item.className='file-item';
-    const thumb = document.createElement('div'); thumb.className='thumb';
-    const meta = document.createElement('div'); meta.className='meta';
-    const nm = document.createElement('div'); nm.className='name'; nm.textContent = f.name;
-    const sub = document.createElement('div'); sub.className='sub';
-    sub.textContent = `${(f.size/1024).toFixed(1)} KB • ${f.type || 'unknown'}`;
-    meta.appendChild(nm); meta.appendChild(sub);
-
-    // thumbnail preview for images
-    if(typeSelect.value === 'image' && f.type.startsWith('image/')){
-      const img = document.createElement('img');
-      img.alt = f.name;
-      thumb.appendChild(img);
-      const reader = new FileReader();
-      reader.onload = ev => img.src = ev.target.result;
-      reader.readAsDataURL(f);
-    } else {
-      // audio or fallback
-      thumb.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 10v4h4l5 5V5L7 10H3z" fill="currentColor"/></svg>';
-    }
-
-    item.appendChild(thumb);
-    item.appendChild(meta);
-    list.appendChild(item);
-  });
-  selectedArea.innerHTML = '';
-  selectedArea.appendChild(list);
-}
-
-encodeBtn.addEventListener('click', async ()=>{
-  if(currentFiles.length===0){ alert('No files selected'); return; }
-  // ensure same type
-  const chosenType = typeSelect.value;
-  if(currentFiles.length>10){ alert('Up to 10 files allowed'); return; }
-
-  outputArea.innerHTML = '<div class="hint">Encoding...</div>';
-
-  outputArea.innerHTML = '';
-  for(const f of currentFiles){
-    // basic type check: for images we expect image mime-type
-    if(chosenType === 'image' && !f.type.startsWith('image/')) {
-      const proceed = confirm(`File "${f.name}" is not an image. Skip it?`);
-      if(!proceed) continue;
-      else continue;
-    }
-    // read file as ArrayBuffer
-    const arr = await f.arrayBuffer();
-    const bytes = new Uint8Array(arr);
-    const meta = {
-      originalType: f.type || '',
-      originalSize: f.size,
-      createdAt: new Date().toISOString()
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result;
+      const [header] = text.split("\n");
+      try {
+        const meta = JSON.parse(header);
+        fileData.push({file, meta, content: text.substring(header.length + 1)});
+        if (meta.password) {
+          passwordContainer.style.display = "block";
+        }
+      } catch {
+        alert(file.name + " is not a valid DLS file.");
+      }
     };
-    const password = passInput.value ? passInput.value : null;
-    const packaged = packDulas(f.name, chosenType, meta, bytes, password);
-    const suggestedName = f.name.replace(/\.[^/.]+$/, '') + '.dls';
-    const link = blobToLink(packaged, suggestedName);
+    reader.readAsText(file);
+  });
+}
 
-    // pretty entry
-    const box = document.createElement('div');
-    box.style.marginBottom='8px';
-    box.appendChild(link);
-    // small details
-    const info = document.createElement('div'); info.className='hint'; info.style.marginTop='6px';
-    info.textContent = `Type: ${chosenType} • ${password ? 'Password protected' : 'No password'} • ${f.name}`;
-    box.appendChild(info);
-    outputArea.appendChild(box);
-  }
-  outputArea.insertAdjacentHTML('afterbegin','<div class="hint">Done — click downloads to save .dls files.</div>');
+function decodeFiles() {
+  const mode = document.querySelector("input[name='mode']:checked")?.value;
+  const password = document.getElementById("password").value;
+
+  if (!mode) return alert("Please select Image or Audio mode.");
+  if (fileData.length === 0) return alert("Please analyze files first.");
+
+  const downloadLinks = document.getElementById("downloadLinks");
+  downloadLinks.innerHTML = "";
+
+  fileData.forEach(({file, meta, content}) => {
+    let data = new TextEncoder().encode(content);
+    if (meta.password) {
+      if (!password) return alert("Password required for " + file.name);
+      const passBytes = new TextEncoder().encode(password);
+      for (let i = 0; i < data.length; i++) {
+        data[i] ^= passBytes[i % passBytes.length];
+      }
+    }
+    const blob = new Blob([data], {type: mode === "image" ? "image/*" : "audio/*"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = file.name.replace(".dls", mode === "image" ? ".png" : ".mp3");
+    link.className = "download-link";
+    link.textContent = "Download " + link.download;
+    downloadLinks.appendChild(link);
+  });
+}
+
+// Update file list
+document.getElementById("fileInput").addEventListener("change", e => {
+  const list = document.getElementById("fileList");
+  list.innerHTML = "";
+  Array.from(e.target.files).forEach(f => {
+    const div = document.createElement("div");
+    div.className = "file-item";
+    div.textContent = f.name;
+    list.appendChild(div);
+  });
 });
 
-/* initial render */
-renderSelected();
+/* 🔹 Save + Restore Scroll & State */
+function saveState() {
+  const state = {
+    scrollY: window.scrollY,
+    mode: document.querySelector("input[name='mode']:checked")?.value || "",
+    passwordValue: document.getElementById("password").value,
+    passwordVisible: document.getElementById("password-container").style.display === "block"
+  };
+  localStorage.setItem("dulas_decode", JSON.stringify(state));
+}
+function restoreState() {
+  const saved = localStorage.getItem("dulas_decode");
+  if (!saved) return;
+  const state = JSON.parse(saved);
+  if (state.mode) {
+    const radio = document.querySelector(`input[name='mode'][value='${state.mode}']`);
+    if (radio) radio.checked = true;
+  }
+  if (state.passwordVisible) {
+    document.getElementById("password-container").style.display = "block";
+  }
+  document.getElementById("password").value = state.passwordValue || "";
+  window.scrollTo(0, state.scrollY || 0);
+}
+window.addEventListener("beforeunload", saveState);
+window.addEventListener("scroll", saveState);
+window.addEventListener("load", restoreState);
 </script>
 </body>
 </html>
