@@ -13,7 +13,6 @@
     --btn:#00c6ff;
     --success: #00c896;
     --error: #ff4d7c;
-    --warning: #ffb44d;
     font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   }
   body{
@@ -110,31 +109,6 @@
     color: var(--error);
     display: block;
   }
-  .password-strength {
-    height: 4px;
-    border-radius: 2px;
-    margin-top: 6px;
-    transition: all 0.3s ease;
-  }
-  .strength-0 { background: var(--error); width: 25%; }
-  .strength-1 { background: #ff6b4d; width: 50%; }
-  .strength-2 { background: var(--warning); width: 75%; }
-  .strength-3 { background: var(--success); width: 100%; }
-  .compression-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 10px;
-    font-size: 13px;
-    opacity: 0.8;
-  }
-  .compression-badge {
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: rgba(0,200,150,0.2);
-    color: var(--success);
-    font-size: 11px;
-  }
   @media (max-width:700px){
     .main{flex-direction:column}
     .right{height:320px}
@@ -165,7 +139,6 @@
         <input id="fileInput" type="file" multiple aria-label="Choose files (up to 10)" accept="*/*"/>
 
         <input id="pass" type="password" placeholder="Optional password" aria-label="password">
-        <div id="passwordStrength" class="password-strength strength-0"></div>
 
         <button class="primary" id="encodeBtn">Encode → .dls</button>
       </div>
@@ -175,16 +148,6 @@
       <div class="left">
         <div style="background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent); padding:12px; border-radius:12px;">
           <strong>Selected files</strong>
-          <div class="compression-info">
-            <label for="compressionLevel">Compression:</label>
-            <select id="compressionLevel">
-              <option value="0">None</option>
-              <option value="1" selected>Fast</option>
-              <option value="2">Balanced</option>
-              <option value="3">Maximum</option>
-            </select>
-            <span class="compression-badge" id="compressionBadge">LZ77 + Huffman</span>
-          </div>
           <div class="progress-bar" id="encodeProgress">
             <div class="progress"></div>
           </div>
@@ -210,7 +173,7 @@
     </div>
 
     <div class="footer">
-      <div class="hint">DULAS format v1.2 — encrypted binary container with compression</div>
+      <div class="hint">DULAS format v1.1 — enhanced binary container</div>
       <div class="hint">Files will be packaged individually (one .dls per original file)</div>
     </div>
   </div>
@@ -220,40 +183,25 @@
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-/* Password strength calculator */
-function calculatePasswordStrength(password) {
-  if (!password) return 0;
-  
-  let strength = 0;
-  
-  // Length check
-  if (password.length >= 8) strength += 1;
-  if (password.length >= 12) strength += 1;
-  
-  // Complexity checks
-  if (/[A-Z]/.test(password)) strength += 1; // Uppercase letters
-  if (/[a-z]/.test(password)) strength += 1; // Lowercase letters
-  if (/[0-9]/.test(password)) strength += 1; // Numbers
-  if (/[^A-Za-z0-9]/.test(password)) strength += 1; // Special characters
-  
-  // Cap at 3 for our UI
-  return Math.min(strength, 3);
-}
-
-/* Modern password-based key derivation with salt and iterations */
-async function deriveEncryptionKey(password, salt) {
+/* Improved keystream generation using PBKDF2-like approach */
+async function buildKeystream(password, length, salt = new Uint8Array(16)) {
   if (!password) return null;
   
-  const encoder = new TextEncoder();
+  // Generate a proper salt if not provided
+  if (salt.length === 0) {
+    salt = crypto.getRandomValues(new Uint8Array(16));
+  }
+  
+  const passwordBuffer = enc.encode(password);
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(password),
+    passwordBuffer,
     { name: 'PBKDF2' },
     false,
-    ['deriveBits', 'deriveKey']
+    ['deriveBits']
   );
   
-  const key = await crypto.subtle.deriveKey(
+  const key = await crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
       salt: salt,
@@ -261,132 +209,21 @@ async function deriveEncryptionKey(password, salt) {
       hash: 'SHA-256'
     },
     keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
+    length * 8
   );
   
-  return key;
-}
-
-/* Compress data using a simple LZ77-inspired algorithm */
-async function compressData(data, level = 1) {
-  if (level === 0) return data; // No compression
-  
-  try {
-    // For level 1 (fast), use simpler compression
-    if (level === 1) {
-      // Simple run-length encoding for repetitive data
-      const compressed = [];
-      let i = 0;
-      
-      while (i < data.length) {
-        // Look for sequences of repeating bytes
-        let repeatCount = 1;
-        const currentByte = data[i];
-        
-        while (i + repeatCount < data.length && 
-               data[i + repeatCount] === currentByte && 
-               repeatCount < 255) {
-          repeatCount++;
-        }
-        
-        if (repeatCount > 3) {
-          // Use RLE encoding for sequences longer than 3
-          compressed.push(0xFF, currentByte, repeatCount);
-          i += repeatCount;
-        } else {
-          // Copy literal bytes
-          compressed.push(data[i++]);
-        }
-      }
-      
-      return new Uint8Array(compressed);
-    }
-    
-    // For higher compression levels, use more advanced techniques
-    if (level >= 2) {
-      // More advanced LZ77-style compression
-      const compressed = [];
-      const windowSize = level === 2 ? 1024 : 4096; // Larger window for higher levels
-      let position = 0;
-      
-      while (position < data.length) {
-        let bestMatch = { offset: 0, length: 0 };
-        
-        // Search for matches in the sliding window
-        const searchStart = Math.max(0, position - windowSize);
-        for (let i = searchStart; i < position; i++) {
-          let matchLength = 0;
-          
-          // Find length of matching sequence
-          while (position + matchLength < data.length && 
-                 data[i + matchLength] === data[position + matchLength] &&
-                 matchLength < 258) { // Maximum match length
-            matchLength++;
-          }
-          
-          if (matchLength > bestMatch.length && matchLength > 3) {
-            bestMatch = { offset: position - i, length: matchLength };
-          }
-        }
-        
-        if (bestMatch.length > 0) {
-          // Encode as (offset, length) pair
-          compressed.push(0xFE); // Marker for LZ77 sequence
-          compressed.push(bestMatch.offset >> 8);
-          compressed.push(bestMatch.offset & 0xFF);
-          compressed.push(bestMatch.length);
-          position += bestMatch.length;
-        } else {
-          // Encode as literal byte
-          if (data[position] === 0xFE || data[position] === 0xFF) {
-            compressed.push(0xFD); // Escape character
-          }
-          compressed.push(data[position++]);
-        }
-      }
-      
-      return new Uint8Array(compressed);
-    }
-  } catch (error) {
-    console.error("Compression error:", error);
-    // Fall back to no compression if anything fails
-    return data;
-  }
-  
-  return data;
-}
-
-/* Encrypt data using AES-GCM */
-async function encryptData(data, key, iv) {
-  try {
-    const encrypted = await crypto.subtle.encrypt(
-      {
-        name: 'AES-GCM',
-        iv: iv
-      },
-      key,
-      data
-    );
-    
-    return new Uint8Array(encrypted);
-  } catch (error) {
-    console.error("Encryption error:", error);
-    throw new Error("Failed to encrypt data");
-  }
+  return new Uint8Array(key);
 }
 
 /* Create a single .dls file with enhanced structure:
    [MAGIC 'DULAS' 5 bytes][VERSION 1 byte][TYPE 1 byte:1=image,2=audio,3=video,4=pdf]
-   [FLAG byte: bit0=passwordProtected, bit1=compressed, bit2=usesModernCrypto]
-   [salt 16 bytes][iv 12 bytes - if passwordProtected]
-   [compressionLevel 1 byte - if compressed]
+   [FLAG byte: bit0=passwordProtected, bit1=hasSalt]
+   [salt 16 bytes - if hasSalt flag is set]
    [nameLen 2 bytes big-endian][nameBytes UTF-8]
    [metaLen 4 bytes big-endian][metaBytes UTF-8]
-   [contentBytes...]  (encrypted if passwordProtected)
+   [contentBytes...]  (if passwordProtected -> content was encrypted with keystream)
 */
-async function packDulas(fileName, fileType, metaObj, contentBytes, password, compressionLevel) {
+async function packDulas(fileName, fileType, metaObj, contentBytes, password) {
   const MAGIC = 'DULAS';
   
   // Convert type to byte code
@@ -399,36 +236,22 @@ async function packDulas(fileName, fileType, metaObj, contentBytes, password, co
 
   let flags = 0;
   let salt = new Uint8Array(0);
-  let iv = new Uint8Array(0);
-  let compressionByte = 0;
   let finalContent = contentBytes;
-  
-  // Apply compression if requested
-  if (compressionLevel > 0) {
-    try {
-      finalContent = await compressData(contentBytes, compressionLevel);
-      flags |= 2; // Set compressed flag
-      compressionByte = compressionLevel;
-    } catch (error) {
-      console.warn("Compression failed, using uncompressed data:", error);
-      // Continue without compression
-    }
-  }
   
   // Encrypt contentBytes if password is provided
   if (password) {
     flags |= 1; // Set password protected flag
-    flags |= 4; // Set modern crypto flag
-    
-    // Generate random salt and IV
     salt = crypto.getRandomValues(new Uint8Array(16));
-    iv = crypto.getRandomValues(new Uint8Array(12));
+    flags |= 2; // Set has salt flag
     
     try {
-      const key = await deriveEncryptionKey(password, salt);
-      finalContent = await encryptData(finalContent, key, iv);
+      const ks = await buildKeystream(password, contentBytes.length, salt);
+      finalContent = new Uint8Array(contentBytes.length);
+      for (let i = 0; i < contentBytes.length; i++) {
+        finalContent[i] = contentBytes[i] ^ ks[i];
+      }
     } catch (error) {
-      console.error("Encryption failed:", error);
+      console.error("Key derivation failed:", error);
       throw new Error("Password processing failed");
     }
   }
@@ -436,8 +259,7 @@ async function packDulas(fileName, fileType, metaObj, contentBytes, password, co
   // Calculate total size
   const totalSize = 
     5 + 1 + 1 + 1 + // Magic, version, type, flags
-    (flags & 1 ? salt.length + iv.length : 0) + // Salt + IV if encrypted
-    (flags & 2 ? 1 : 0) + // Compression level byte if compressed
+    (flags & 2 ? 16 : 0) + // Salt if present
     2 + nameBytes.length + // Name length + name
     4 + metaBytes.length + // Meta length + meta
     finalContent.length; // Content
@@ -451,17 +273,10 @@ async function packDulas(fileName, fileType, metaObj, contentBytes, password, co
   out[p++] = typeByte;
   out[p++] = flags & 0xff;
   
-  // Salt and IV if encrypted
-  if (flags & 1) {
+  // Salt if present
+  if (flags & 2) {
     out.set(salt, p);
     p += salt.length;
-    out.set(iv, p);
-    p += iv.length;
-  }
-  
-  // Compression level if compressed
-  if (flags & 2) {
-    out[p++] = compressionByte;
   }
   
   // Name length (2 bytes big-endian)
@@ -481,13 +296,7 @@ async function packDulas(fileName, fileType, metaObj, contentBytes, password, co
   // Content
   out.set(finalContent, p);
   
-  return {
-    data: out,
-    originalSize: contentBytes.length,
-    compressedSize: finalContent.length,
-    compressed: (flags & 2) !== 0,
-    encrypted: (flags & 1) !== 0
-  };
+  return out;
 }
 
 /* Helper to convert ArrayBuffer to Blob download link */
@@ -514,29 +323,8 @@ const clearBtn = document.getElementById('clearBtn');
 const encodeProgress = document.getElementById('encodeProgress');
 const progressBar = encodeProgress.querySelector('.progress');
 const statusMessage = document.getElementById('statusMessage');
-const passwordStrength = document.getElementById('passwordStrength');
-const compressionLevel = document.getElementById('compressionLevel');
-const compressionBadge = document.getElementById('compressionBadge');
 
 let currentFiles = [];
-
-// Update password strength indicator
-passInput.addEventListener('input', () => {
-  const strength = calculatePasswordStrength(passInput.value);
-  passwordStrength.className = `password-strength strength-${strength}`;
-});
-
-// Update compression badge text
-compressionLevel.addEventListener('change', () => {
-  const level = parseInt(compressionLevel.value);
-  const badges = [
-    "None",
-    "Fast (RLE)",
-    "Balanced (LZ77)",
-    "Maximum (LZ77)"
-  ];
-  compressionBadge.textContent = badges[level] || "Unknown";
-});
 
 fileInput.addEventListener('change', e => {
   const files = Array.from(e.target.files).slice(0, 10); // cap 10
@@ -647,7 +435,6 @@ encodeBtn.addEventListener('click', async () => {
   }
   
   const chosenType = typeSelect.value;
-  const compLevel = parseInt(compressionLevel.value);
   encodeBtn.disabled = true;
   showProgress(0);
   hideStatus();
@@ -691,17 +478,13 @@ encodeBtn.addEventListener('click', async () => {
           originalName: f.name
         };
         
-        const packaged = await packDulas(f.name, chosenType, meta, bytes, password, compLevel);
+        const packaged = await packDulas(f.name, chosenType, meta, bytes, password);
         const suggestedName = f.name.replace(/\.[^/.]+$/, '') + '.dls';
         
         results.push({
           file: f,
-          packaged: packaged.data,
-          suggestedName: suggestedName,
-          originalSize: packaged.originalSize,
-          compressedSize: packaged.compressedSize,
-          compressed: packaged.compressed,
-          encrypted: packaged.encrypted
+          packaged: packaged,
+          suggestedName: suggestedName
         });
       } catch (error) {
         console.error(`Error processing ${f.name}:`, error);
@@ -716,13 +499,7 @@ encodeBtn.addEventListener('click', async () => {
       outputArea.innerHTML = '<div class="hint">No files were successfully encoded.</div>';
       showStatus('Encoding completed with errors', 'error');
     } else {
-      let totalOriginalSize = 0;
-      let totalCompressedSize = 0;
-      
       results.forEach(result => {
-        totalOriginalSize += result.originalSize;
-        totalCompressedSize += result.compressedSize;
-        
         const link = blobToLink(result.packaged, result.suggestedName);
         
         const box = document.createElement('div');
@@ -732,38 +509,13 @@ encodeBtn.addEventListener('click', async () => {
         const info = document.createElement('div');
         info.className = 'hint';
         info.style.marginTop = '6px';
-        
-        let infoText = `Type: ${chosenType} • `;
-        infoText += result.encrypted ? 'Encrypted • ' : 'No encryption • ';
-        infoText += result.compressed ? 
-          `Compressed: ${(result.originalSize/1024).toFixed(1)}KB → ${(result.compressedSize/1024).toFixed(1)}KB (${(100 - (result.compressedSize/result.originalSize * 100)).toFixed(1)}% saved) • ` : 
-          'Not compressed • ';
-        infoText += result.file.name;
-        
-        info.textContent = infoText;
+        info.textContent = `Type: ${chosenType} • ${password ? 'Password protected' : 'No password'} • ${result.file.name}`;
         box.appendChild(info);
         
         outputArea.appendChild(box);
       });
       
-      // Add summary
-      const summary = document.createElement('div');
-      summary.className = 'hint';
-      summary.style.marginBottom = '12px';
-      summary.style.padding = '8px';
-      summary.style.background = 'rgba(255,255,255,0.05)';
-      summary.style.borderRadius = '6px';
-      
-      let summaryText = `Encoded ${results.length} file(s). `;
-      if (compLevel > 0) {
-        const compressionRatio = (100 - (totalCompressedSize / totalOriginalSize * 100)).toFixed(1);
-        summaryText += `Compression: ${(totalOriginalSize/1024).toFixed(1)}KB → ${(totalCompressedSize/1024).toFixed(1)}KB (${compressionRatio}% saved). `;
-      }
-      summaryText += results.some(r => r.encrypted) ? 'Files are encrypted.' : 'Files are not encrypted.';
-      
-      summary.textContent = summaryText;
-      outputArea.insertBefore(summary, outputArea.firstChild);
-      
+      outputArea.insertAdjacentHTML('afterbegin', `<div class="hint">Encoded ${results.length} file(s) successfully.</div>`);
       showStatus(`Successfully encoded ${results.length} file(s)`, 'success');
     }
   } catch (error) {
