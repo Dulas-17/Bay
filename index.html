@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>DULAS — Encoder</title>
+<title>DULAS — Advanced Encoder</title>
 <style>
   :root{
     --bg1:#14142b; --bg2:#2b2a59;
@@ -11,6 +11,8 @@
     --accent:#7c5cff;
     --accent-2:#00d4ff;
     --btn:#00c6ff;
+    --success: #00c896;
+    --error: #ff4d7c;
     font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   }
   body{
@@ -31,24 +33,89 @@
   button.primary{
     background:linear-gradient(90deg,var(--accent),var(--accent-2)); color:#012; border:none; padding:10px 16px; border-radius:10px; cursor:pointer;
     box-shadow: 0 6px 18px rgba(124,92,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.12);
+    transition: all 0.2s ease;
+  }
+  button.primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(124,92,255,0.25), inset 0 -2px 0 rgba(0,0,0,0.12);
+  }
+  button.primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
   }
   .main{display:flex; gap:16px; margin-top:14px; flex-wrap:wrap}
   .left{flex:1; min-width:240px}
   .right{width:360px; max-width:100%; background:rgba(255,255,255,0.02); padding:12px; border-radius:12px; height:420px; overflow:auto}
   .file-list{display:flex; flex-direction:column; gap:10px}
-  .file-item{display:flex; gap:10px; align-items:center; background:rgba(0,0,0,0.25); padding:8px; border-radius:8px}
+  .file-item{display:flex; gap:10px; align-items:center; background:rgba(0,0,0,0.25); padding:8px; border-radius:8px; position: relative;}
+  .file-item .remove-btn {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: var(--error);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   .thumb{width:52px; height:52px; border-radius:8px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:rgba(255,255,255,0.03)}
   .thumb img{width:100%; height:100%; object-fit:cover}
   .meta{flex:1; min-width:0}
   .meta .name{font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .meta .sub{font-size:12px; opacity:0.7}
   .download-links{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
-  a.dl{padding:8px 12px; border-radius:8px; background:linear-gradient(90deg,#e9f0ff, #c8e9ff); color:#013; text-decoration:none; font-weight:600; display:inline-block}
+  a.dl{padding:8px 12px; border-radius:8px; background:linear-gradient(90deg,#e9f0ff, #c8e9ff); color:#013; text-decoration:none; font-weight:600; display:inline-block; transition: all 0.2s ease;}
+  a.dl:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
   .hint{font-size:13px; opacity:0.8}
   .footer{margin-top:12px; display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap}
+  .progress-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 8px;
+    display: none;
+  }
+  .progress-bar .progress {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+  .status-message {
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-top: 10px;
+    font-size: 13px;
+    display: none;
+  }
+  .status-success {
+    background: rgba(0,200,150,0.15);
+    color: var(--success);
+    display: block;
+  }
+  .status-error {
+    background: rgba(255,77,124,0.15);
+    color: var(--error);
+    display: block;
+  }
   @media (max-width:700px){
     .main{flex-direction:column}
     .right{height:320px}
+    .controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
   }
 </style>
 </head>
@@ -56,8 +123,8 @@
   <div class="wrap" role="main">
     <header>
       <div>
-        <h1>DULAS Encoder</h1>
-        <div class="hint">Create a private .dls container (images & audio). Up to 10 files</div>
+        <h1>DULAS Advanced Encoder</h1>
+        <div class="hint">Create a private .dls container (images, audio, video, PDF). Up to 10 files</div>
       </div>
 
       <div class="controls" aria-hidden="false">
@@ -65,11 +132,13 @@
         <select id="typeSelect" aria-label="Choose type">
           <option value="image">Images</option>
           <option value="audio">Audio</option>
+          <option value="video">Video</option>
+          <option value="pdf">PDF</option>
         </select>
 
-        <input id="fileInput" type="file" multiple aria-label="Choose files (up to 10)"/>
+        <input id="fileInput" type="file" multiple aria-label="Choose files (up to 10)" accept="*/*"/>
 
-        <input id="pass" type="password" placeholder="Optional password (leave blank)" aria-label="password">
+        <input id="pass" type="password" placeholder="Optional password" aria-label="password">
 
         <button class="primary" id="encodeBtn">Encode → .dls</button>
       </div>
@@ -79,14 +148,19 @@
       <div class="left">
         <div style="background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent); padding:12px; border-radius:12px;">
           <strong>Selected files</strong>
+          <div class="progress-bar" id="encodeProgress">
+            <div class="progress"></div>
+          </div>
           <div id="selectedArea" style="margin-top:10px">
-            <div class="hint">Choose images or audio. Thumbnails appear here.</div>
+            <div class="hint">Choose files. Thumbnails will appear here.</div>
           </div>
         </div>
 
         <div style="margin-top:10px">
           <button id="clearBtn" style="padding:10px;border-radius:10px;border:none;background:#333;color:#fff">Clear selection</button>
         </div>
+
+        <div id="statusMessage" class="status-message"></div>
 
       </div>
 
@@ -99,7 +173,7 @@
     </div>
 
     <div class="footer">
-      <div class="hint">DULAS format v1 — opaque binary container</div>
+      <div class="hint">DULAS format v1.1 — enhanced binary container</div>
       <div class="hint">Files will be packaged individually (one .dls per original file)</div>
     </div>
   </div>
@@ -109,78 +183,132 @@
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-/* Build a simple deterministic keystream from password (demo-grade).
-   It repeats/rotates password bytes and xors with a simple counter — deterministic, fast. */
-function buildKeystream(password, length){
-  if(!password) return null;
-  const pbytes = enc.encode(password);
-  const out = new Uint8Array(length);
-  let s = 0x9e; // seed
-  for(let i=0;i<length;i++){
-    const pb = pbytes[i % pbytes.length];
-    // mix with a tiny PRNG-ish step
-    s = (s + pb + (i & 0xff)) & 0xff;
-    out[i] = (pb ^ s);
+/* Improved keystream generation using PBKDF2-like approach */
+async function buildKeystream(password, length, salt = new Uint8Array(16)) {
+  if (!password) return null;
+  
+  // Generate a proper salt if not provided
+  if (salt.length === 0) {
+    salt = crypto.getRandomValues(new Uint8Array(16));
   }
-  return out;
+  
+  const passwordBuffer = enc.encode(password);
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    passwordBuffer,
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits']
+  );
+  
+  const key = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: salt,
+      iterations: 100000,
+      hash: 'SHA-256'
+    },
+    keyMaterial,
+    length * 8
+  );
+  
+  return new Uint8Array(key);
 }
 
-/* Create a single .dls file as Uint8Array with structure:
-   [MAGIC 'DULAS' 5 bytes][VERSION 1 byte][TYPE 1 byte:1=image,2=audio]
-   [FLAG byte: bit0=passwordProtected]
+/* Create a single .dls file with enhanced structure:
+   [MAGIC 'DULAS' 5 bytes][VERSION 1 byte][TYPE 1 byte:1=image,2=audio,3=video,4=pdf]
+   [FLAG byte: bit0=passwordProtected, bit1=hasSalt]
+   [salt 16 bytes - if hasSalt flag is set]
    [nameLen 2 bytes big-endian][nameBytes UTF-8]
    [metaLen 4 bytes big-endian][metaBytes UTF-8]
-   [contentBytes...]  (if passwordProtected -> content was XORed with keystream)
+   [contentBytes...]  (if passwordProtected -> content was encrypted with keystream)
 */
-function packDulas(fileName, fileType, metaObj, contentBytes, password){
+async function packDulas(fileName, fileType, metaObj, contentBytes, password) {
   const MAGIC = 'DULAS';
+  
+  // Convert type to byte code
+  const typeMap = { image: 1, audio: 2, video: 3, pdf: 4 };
+  const typeByte = typeMap[fileType] || 0;
+  
   const nameBytes = enc.encode(fileName);
   const metaStr = JSON.stringify(metaObj);
   const metaBytes = enc.encode(metaStr);
 
-  const flags = password ? 1 : 0;
-  const typeByte = (fileType === 'image') ? 1 : 2;
-
-  // encrypt contentBytes if password
+  let flags = 0;
+  let salt = new Uint8Array(0);
   let finalContent = contentBytes;
-  if(password){
-    const ks = buildKeystream(password, contentBytes.length);
-    finalContent = new Uint8Array(contentBytes.length);
-    for(let i=0;i<contentBytes.length;i++) finalContent[i] = contentBytes[i] ^ ks[i];
+  
+  // Encrypt contentBytes if password is provided
+  if (password) {
+    flags |= 1; // Set password protected flag
+    salt = crypto.getRandomValues(new Uint8Array(16));
+    flags |= 2; // Set has salt flag
+    
+    try {
+      const ks = await buildKeystream(password, contentBytes.length, salt);
+      finalContent = new Uint8Array(contentBytes.length);
+      for (let i = 0; i < contentBytes.length; i++) {
+        finalContent[i] = contentBytes[i] ^ ks[i];
+      }
+    } catch (error) {
+      console.error("Key derivation failed:", error);
+      throw new Error("Password processing failed");
+    }
   }
 
-  const total =
-    5 + 1 + 1 + 1 + 2 + nameBytes.length + 4 + metaBytes.length + finalContent.length;
+  // Calculate total size
+  const totalSize = 
+    5 + 1 + 1 + 1 + // Magic, version, type, flags
+    (flags & 2 ? 16 : 0) + // Salt if present
+    2 + nameBytes.length + // Name length + name
+    4 + metaBytes.length + // Meta length + meta
+    finalContent.length; // Content
 
-  const out = new Uint8Array(total);
-  let p=0;
+  const out = new Uint8Array(totalSize);
+  let p = 0;
+  
   // MAGIC
-  for(let i=0;i<5;i++) out[p++]=MAGIC.charCodeAt(i);
+  for (let i = 0; i < 5; i++) out[p++] = MAGIC.charCodeAt(i);
   out[p++] = 1; // version
   out[p++] = typeByte;
   out[p++] = flags & 0xff;
-  // name len (2 bytes big-endian)
+  
+  // Salt if present
+  if (flags & 2) {
+    out.set(salt, p);
+    p += salt.length;
+  }
+  
+  // Name length (2 bytes big-endian)
   out[p++] = (nameBytes.length >> 8) & 0xff;
   out[p++] = nameBytes.length & 0xff;
-  out.set(nameBytes, p); p += nameBytes.length;
-  // meta len (4 bytes BE)
+  out.set(nameBytes, p);
+  p += nameBytes.length;
+  
+  // Meta length (4 bytes BE)
   out[p++] = (metaBytes.length >>> 24) & 0xff;
   out[p++] = (metaBytes.length >>> 16) & 0xff;
   out[p++] = (metaBytes.length >>> 8) & 0xff;
   out[p++] = (metaBytes.length) & 0xff;
-  out.set(metaBytes, p); p += metaBytes.length;
-  // content
-  out.set(finalContent, p); p += finalContent.length;
+  out.set(metaBytes, p);
+  p += metaBytes.length;
+  
+  // Content
+  out.set(finalContent, p);
+  
   return out;
 }
 
 /* Helper to convert ArrayBuffer to Blob download link */
-function blobToLink(uint8arr, suggestedName){
-  const blob = new Blob([uint8arr], {type: 'application/octet-stream'});
+function blobToLink(uint8arr, suggestedName) {
+  const blob = new Blob([uint8arr], { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = suggestedName; a.className='dl';
+  a.href = url;
+  a.download = suggestedName;
+  a.className = 'dl';
   a.textContent = `Download ${suggestedName}`;
+  a.setAttribute('aria-label', `Download ${suggestedName}`);
   return a;
 }
 
@@ -192,101 +320,212 @@ const encodeBtn = document.getElementById('encodeBtn');
 const selectedArea = document.getElementById('selectedArea');
 const outputArea = document.getElementById('outputArea');
 const clearBtn = document.getElementById('clearBtn');
+const encodeProgress = document.getElementById('encodeProgress');
+const progressBar = encodeProgress.querySelector('.progress');
+const statusMessage = document.getElementById('statusMessage');
 
 let currentFiles = [];
 
-fileInput.addEventListener('change', e=>{
-  const files = Array.from(e.target.files).slice(0,10); // cap 10
+fileInput.addEventListener('change', e => {
+  const files = Array.from(e.target.files).slice(0, 10); // cap 10
   currentFiles = files;
   renderSelected();
 });
 
-typeSelect.addEventListener('change', ()=>{ renderSelected(); });
+typeSelect.addEventListener('change', () => { renderSelected(); });
 
-clearBtn.addEventListener('click', ()=>{
+clearBtn.addEventListener('click', () => {
   currentFiles = [];
   fileInput.value = '';
   renderSelected();
   outputArea.innerHTML = '<div class="hint">Cleared.</div>';
+  hideStatus();
 });
 
-function renderSelected(){
-  if(currentFiles.length===0){
-    selectedArea.innerHTML = '<div class="hint">Choose images or audio. Thumbnails will appear here.</div>';
+function showStatus(message, type = 'success') {
+  statusMessage.textContent = message;
+  statusMessage.className = `status-message status-${type}`;
+}
+
+function hideStatus() {
+  statusMessage.style.display = 'none';
+}
+
+function showProgress(percent) {
+  encodeProgress.style.display = 'block';
+  progressBar.style.width = `${percent}%`;
+}
+
+function hideProgress() {
+  encodeProgress.style.display = 'none';
+}
+
+function renderSelected() {
+  if (currentFiles.length === 0) {
+    selectedArea.innerHTML = '<div class="hint">Choose files. Thumbnails will appear here.</div>';
     return;
   }
+  
   const list = document.createElement('div');
   list.className = 'file-list';
-  currentFiles.forEach((f, idx)=>{
-    const item = document.createElement('div'); item.className='file-item';
-    const thumb = document.createElement('div'); thumb.className='thumb';
-    const meta = document.createElement('div'); meta.className='meta';
-    const nm = document.createElement('div'); nm.className='name'; nm.textContent = f.name;
-    const sub = document.createElement('div'); sub.className='sub';
-    sub.textContent = `${(f.size/1024).toFixed(1)} KB • ${f.type || 'unknown'}`;
-    meta.appendChild(nm); meta.appendChild(sub);
-
-    // thumbnail preview for images
-    if(typeSelect.value === 'image' && f.type.startsWith('image/')){
+  
+  currentFiles.forEach((f, idx) => {
+    const item = document.createElement('div');
+    item.className = 'file-item';
+    item.dataset.index = idx;
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-btn';
+    removeBtn.innerHTML = '×';
+    removeBtn.title = 'Remove file';
+    removeBtn.addEventListener('click', () => {
+      currentFiles.splice(idx, 1);
+      renderSelected();
+    });
+    
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    
+    const nm = document.createElement('div');
+    nm.className = 'name';
+    nm.textContent = f.name;
+    
+    const sub = document.createElement('div');
+    sub.className = 'sub';
+    sub.textContent = `${(f.size / 1024).toFixed(1)} KB • ${f.type || 'unknown'}`;
+    
+    meta.appendChild(nm);
+    meta.appendChild(sub);
+    
+    // Thumbnail preview based on file type
+    const fileType = typeSelect.value;
+    if (fileType === 'image' && f.type.startsWith('image/')) {
       const img = document.createElement('img');
       img.alt = f.name;
       thumb.appendChild(img);
       const reader = new FileReader();
       reader.onload = ev => img.src = ev.target.result;
       reader.readAsDataURL(f);
+    } else if (fileType === 'pdf' && f.type === 'application/pdf') {
+      thumb.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zM15 18H9v-2h6v2zm0-4H9v-2h6v2zm-2-4V9.5L15.5 10H13z" fill="currentColor"/></svg>';
+    } else if (fileType === 'video' && f.type.startsWith('video/')) {
+      thumb.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/></svg>';
     } else {
-      // audio or fallback
+      // Audio or fallback
       thumb.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 10v4h4l5 5V5L7 10H3z" fill="currentColor"/></svg>';
     }
-
+    
+    item.appendChild(removeBtn);
     item.appendChild(thumb);
     item.appendChild(meta);
     list.appendChild(item);
   });
+  
   selectedArea.innerHTML = '';
   selectedArea.appendChild(list);
 }
 
-encodeBtn.addEventListener('click', async ()=>{
-  if(currentFiles.length===0){ alert('No files selected'); return; }
-  // ensure same type
-  const chosenType = typeSelect.value;
-  if(currentFiles.length>10){ alert('Up to 10 files allowed'); return; }
-
-  outputArea.innerHTML = '<div class="hint">Encoding...</div>';
-
-  outputArea.innerHTML = '';
-  for(const f of currentFiles){
-    // basic type check: for images we expect image mime-type
-    if(chosenType === 'image' && !f.type.startsWith('image/')) {
-      const proceed = confirm(`File "${f.name}" is not an image. Skip it?`);
-      if(!proceed) continue;
-      else continue;
-    }
-    // read file as ArrayBuffer
-    const arr = await f.arrayBuffer();
-    const bytes = new Uint8Array(arr);
-    const meta = {
-      originalType: f.type || '',
-      originalSize: f.size,
-      createdAt: new Date().toISOString()
-    };
-    const password = passInput.value ? passInput.value : null;
-    const packaged = packDulas(f.name, chosenType, meta, bytes, password);
-    const suggestedName = f.name.replace(/\.[^/.]+$/, '') + '.dls';
-    const link = blobToLink(packaged, suggestedName);
-
-    // pretty entry
-    const box = document.createElement('div');
-    box.style.marginBottom='8px';
-    box.appendChild(link);
-    // small details
-    const info = document.createElement('div'); info.className='hint'; info.style.marginTop='6px';
-    info.textContent = `Type: ${chosenType} • ${password ? 'Password protected' : 'No password'} • ${f.name}`;
-    box.appendChild(info);
-    outputArea.appendChild(box);
+encodeBtn.addEventListener('click', async () => {
+  if (currentFiles.length === 0) {
+    showStatus('No files selected', 'error');
+    return;
   }
-  outputArea.insertAdjacentHTML('afterbegin','<div class="hint">Done — click downloads to save .dls files.</div>');
+  
+  const chosenType = typeSelect.value;
+  encodeBtn.disabled = true;
+  showProgress(0);
+  hideStatus();
+  
+  outputArea.innerHTML = '<div class="hint">Encoding...</div>';
+  
+  try {
+    const password = passInput.value ? passInput.value : null;
+    const results = [];
+    
+    for (let i = 0; i < currentFiles.length; i++) {
+      const f = currentFiles[i];
+      showProgress((i / currentFiles.length) * 100);
+      
+      // Basic type validation
+      if (chosenType === 'image' && !f.type.startsWith('image/')) {
+        showStatus(`File "${f.name}" is not an image. Skipping.`, 'error');
+        continue;
+      }
+      if (chosenType === 'audio' && !f.type.startsWith('audio/')) {
+        showStatus(`File "${f.name}" is not an audio file. Skipping.`, 'error');
+        continue;
+      }
+      if (chosenType === 'video' && !f.type.startsWith('video/')) {
+        showStatus(`File "${f.name}" is not a video file. Skipping.`, 'error');
+        continue;
+      }
+      if (chosenType === 'pdf' && f.type !== 'application/pdf') {
+        showStatus(`File "${f.name}" is not a PDF. Skipping.`, 'error');
+        continue;
+      }
+      
+      try {
+        // Read file as ArrayBuffer
+        const arr = await f.arrayBuffer();
+        const bytes = new Uint8Array(arr);
+        const meta = {
+          originalType: f.type || '',
+          originalSize: f.size,
+          createdAt: new Date().toISOString(),
+          originalName: f.name
+        };
+        
+        const packaged = await packDulas(f.name, chosenType, meta, bytes, password);
+        const suggestedName = f.name.replace(/\.[^/.]+$/, '') + '.dls';
+        
+        results.push({
+          file: f,
+          packaged: packaged,
+          suggestedName: suggestedName
+        });
+      } catch (error) {
+        console.error(`Error processing ${f.name}:`, error);
+        showStatus(`Error processing ${f.name}: ${error.message}`, 'error');
+      }
+    }
+    
+    showProgress(100);
+    outputArea.innerHTML = '';
+    
+    if (results.length === 0) {
+      outputArea.innerHTML = '<div class="hint">No files were successfully encoded.</div>';
+      showStatus('Encoding completed with errors', 'error');
+    } else {
+      results.forEach(result => {
+        const link = blobToLink(result.packaged, result.suggestedName);
+        
+        const box = document.createElement('div');
+        box.style.marginBottom = '12px';
+        box.appendChild(link);
+        
+        const info = document.createElement('div');
+        info.className = 'hint';
+        info.style.marginTop = '6px';
+        info.textContent = `Type: ${chosenType} • ${password ? 'Password protected' : 'No password'} • ${result.file.name}`;
+        box.appendChild(info);
+        
+        outputArea.appendChild(box);
+      });
+      
+      outputArea.insertAdjacentHTML('afterbegin', `<div class="hint">Encoded ${results.length} file(s) successfully.</div>`);
+      showStatus(`Successfully encoded ${results.length} file(s)`, 'success');
+    }
+  } catch (error) {
+    console.error('Encoding error:', error);
+    outputArea.innerHTML = '<div class="hint">An error occurred during encoding.</div>';
+    showStatus(`Encoding error: ${error.message}`, 'error');
+  } finally {
+    encodeBtn.disabled = false;
+    setTimeout(() => hideProgress(), 500);
+  }
 });
 
 /* initial render */
