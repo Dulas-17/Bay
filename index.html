@@ -1,320 +1,129 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DULAS Image Format Demo (JS)</title>
-<style>
-  :root { --bg:#0b0f14; --card:#121821; --muted:#9fb0c3; --ink:#e7eef7; --accent:#5ad; }
-  body { margin:0; font-family:system-ui,Segoe UI,Roboto,Inter,Arial; background:var(--bg); color:var(--ink); }
-  header { padding:1rem 1.25rem; border-bottom:1px solid #1e2a38; }
-  header h1 { margin:0; font-size:1.25rem; letter-spacing:.02em; }
-  main { padding:1rem; display:grid; gap:1rem; grid-template-columns:1fr; }
-  @media (min-width:900px){ main{ grid-template-columns:1fr 1fr; } }
-  .card { background:var(--card); border:1px solid #1e2a38; border-radius:16px; padding:1rem; box-shadow:0 6px 30px rgba(0,0,0,.25); }
-  .card h2 { margin:.25rem 0 1rem; font-size:1.05rem; color:var(--muted); }
-  .row { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; }
-  input[type=file] { color:var(--ink); }
-  button { background:var(--accent); color:#05131f; border:0; padding:.65rem .9rem; border-radius:12px; font-weight:600; cursor:pointer; }
-  button.secondary { background:#1f2a38; color:var(--ink); }
-  .stat { font-size:.9rem; color:var(--muted); }
-  canvas { max-width:100%; background:#0002; border-radius:12px; }
-  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
-</style>
+  <meta charset="UTF-8">
+  <title>DULAS Decoder</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(120deg, #11998e, #38ef7d);
+      color: white;
+      text-align: center;
+      padding: 40px;
+    }
+    .container {
+      background: rgba(0,0,0,0.4);
+      padding: 20px;
+      border-radius: 15px;
+      display: inline-block;
+      width: 400px;
+    }
+    input, select, button {
+      margin: 8px;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      width: 80%;
+    }
+    button {
+      background: #ff416c;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover { background: #ff4b2b; }
+    img { max-width: 200px; margin-top: 10px; }
+  </style>
 </head>
 <body>
-<header><h1>DULAS — Custom Lossless Image Format (JavaScript encoder/decoder)</h1></header>
-<main>
-  <!-- ENCODE -->
-  <section class="card">
-    <h2>Encode image ➜ .dulas</h2>
-    <div class="row">
-      <input type="file" id="encodeInput" accept="image/*" />
-      <button id="encodeBtn" disabled>Encode & Download .dulas</button>
-    </div>
-    <p class="stat" id="encodeStat">No image loaded.</p>
-    <canvas id="encodeCanvas"></canvas>
-  </section>
+  <div class="container">
+    <h1>🔓 DULAS Decoder</h1>
+    <p>Choose what to decode:</p>
+    <select id="decodeType">
+      <option value="image">Images</option>
+      <option value="audio">Audio</option>
+    </select>
+    <br>
+    <input type="file" id="dlsInput" multiple>
+    <br>
+    <input type="password" id="password" placeholder="Password (if required)">
+    <br>
+    <button onclick="decodeFiles()">Decode .dls</button>
+    <div id="output"></div>
+  </div>
 
-  <!-- DECODE -->
-  <section class="card">
-    <h2>Decode .dulas ➜ preview / PNG</h2>
-    <div class="row">
-      <input type="file" id="decodeInput" accept=".dulas,application/octet-stream" />
-      <button id="exportPngBtn" class="secondary" disabled>Export decoded as PNG</button>
-    </div>
-    <p class="stat mono" id="decodeStat">No .dulas loaded.</p>
-    <canvas id="decodeCanvas"></canvas>
-  </section>
-
-  <!-- SPEC -->
-  <section class="card" style="grid-column:1/-1">
-    <h2>Format spec (DULAS v1)</h2>
-    <pre class="mono" style="white-space:pre-wrap; margin:0">
-Header (16 bytes):
-- magic[5]   = 'D','U','L','A','S'
-- version[1] = 0x01
-- width[4]   = uint32 LE
-- height[4]  = uint32 LE
-- channels[1]= 0x04  (RGBA)
-- depth[1]   = 0x08  (8 bits per channel)
-- comp[1]    = 0x01  (RLE of repeated pixels)
-
-Payload:
-- stream of opcodes:
-  0x00 + [R,G,B,A]         → write raw pixel, update prev
-  0x01 + [count: uint16LE] → repeat previous pixel 'count' more times
-Encoded order: left→right, top→bottom.
-    </pre>
-  </section>
-</main>
-
-<script>
-// ---------- Helpers ----------
-const MAGIC = [0x44,0x55,0x4C,0x41,0x53]; // "DULAS"
-const VERSION = 1;
-
-function writeU16LE(arr, n){ arr.push(n & 255, (n>>>8) & 255); }
-function writeU32LE(arr, n){
-  arr.push(n & 255, (n>>>8)&255, (n>>>16)&255, (n>>>24)&255);
-}
-function readU16LE(view, o){ return view.getUint16(o, true); }
-function readU32LE(view, o){ return view.getUint32(o, true); }
-
-function pixelsEqual(p, q){
-  return p[0]===q[0] && p[1]===q[1] && p[2]===q[2] && p[3]===q[3];
-}
-
-function chunkedRepeatBytes(arr, pixel, count){
-  // Emit RLE repeats in chunks up to 65535
-  let remaining = count;
-  while(remaining > 0){
-    const n = Math.min(remaining, 65535);
-    arr.push(0x01); // RLE opcode
-    writeU16LE(arr, n);
-    remaining -= n;
-  }
-}
-
-// ---------- ENCODER ----------
-/**
- * Encode ImageData to DULAS format (Uint8Array)
- * Simple lossless codec: raw RGBA + repeated-pixel RLE
- */
-function encodeDULAS(imageData){
-  const {width, height, data} = imageData;
-  const out = [];
-  // Header
-  out.push(...MAGIC);
-  out.push(VERSION);
-  writeU32LE(out, width);
-  writeU32LE(out, height);
-  out.push(4); // channels RGBA
-  out.push(8); // 8-bit
-  out.push(1); // compression: RLE v1
-
-  const totalPx = width * height;
-  if(totalPx === 0) return new Uint8Array(out);
-
-  let i = 0; // index in data (bytes)
-  // First pixel: raw
-  let prev = [data[0], data[1], data[2], data[3]];
-  out.push(0x00, prev[0], prev[1], prev[2], prev[3]);
-  i += 4;
-
-  let runLen = 0; // number of repeats of prev AFTER first occurrence
-  let pixelsWritten = 1;
-
-  for(; pixelsWritten < totalPx; pixelsWritten++, i += 4){
-    const cur = [data[i], data[i+1], data[i+2], data[i+3]];
-    if(pixelsEqual(cur, prev)){
-      runLen++;
-      // If run hits max representable, flush
-      if(runLen === 65535){
-        chunkedRepeatBytes(out, prev, runLen);
-        runLen = 0;
+  <script>
+    function xorEncryptDecrypt(data, password) {
+      let result = "";
+      for (let i = 0; i < data.length; i++) {
+        result += String.fromCharCode(
+          data.charCodeAt(i) ^ password.charCodeAt(i % password.length)
+        );
       }
-    } else {
-      // Flush any pending run of previous pixel
-      if(runLen > 0){
-        chunkedRepeatBytes(out, prev, runLen);
-        runLen = 0;
-      }
-      // Emit new raw pixel
-      out.push(0x00, cur[0], cur[1], cur[2], cur[3]);
-      prev = cur;
+      return result;
     }
-  }
-  // Flush tail run
-  if(runLen > 0){
-    chunkedRepeatBytes(out, prev, runLen);
-  }
 
-  return new Uint8Array(out);
-}
+    function decodeFiles() {
+      const decodeType = document.getElementById("decodeType").value;
+      const password = document.getElementById("password").value;
+      const files = document.getElementById("dlsInput").files;
+      const output = document.getElementById("output");
+      output.innerHTML = "";
 
-// ---------- DECODER ----------
-/**
- * Decode DULAS bytes to ImageData
- * Returns { imageData, width, height }
- */
-function decodeDULAS(bytes){
-  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-
-  // Validate header
-  let off = 0;
-  for(let i=0;i<5;i++){
-    if(u8[off+i] !== MAGIC[i]) throw new Error("Not a DULAS file (bad magic).");
-  }
-  off += 5;
-  const version = u8[off++]; if(version !== VERSION) throw new Error(`Unsupported DULAS version ${version}.`);
-  const width  = readU32LE(view, off); off += 4;
-  const height = readU32LE(view, off); off += 4;
-  const channels = u8[off++]; if(channels !== 4) throw new Error("Unsupported channels (expected RGBA).");
-  const depth = u8[off++]; if(depth !== 8) throw new Error("Unsupported bit depth (expected 8).");
-  const comp  = u8[off++]; if(comp !== 1) throw new Error("Unsupported compression (expected RLE=1).");
-
-  const totalPx = width * height;
-  const out = new Uint8ClampedArray(totalPx * 4);
-  let px = 0;
-  let prev = [0,0,0,0];
-
-  while(off < u8.length && px < totalPx){
-    const op = u8[off++];
-    if(op === 0x00){
-      // raw pixel
-      const r = u8[off++], g = u8[off++], b = u8[off++], a = u8[off++];
-      out[px*4+0]=r; out[px*4+1]=g; out[px*4+2]=b; out[px*4+3]=a;
-      prev = [r,g,b,a];
-      px++;
-    } else if(op === 0x01){
-      // repeat prev N times
-      const count = readU16LE(view, off); off += 2;
-      if(px===0) throw new Error("RLE run appears before first raw pixel.");
-      for(let k=0;k<count && px<totalPx;k++, px++){
-        out[px*4+0]=prev[0]; out[px*4+1]=prev[1];
-        out[px*4+2]=prev[2]; out[px*4+3]=prev[3];
+      if (files.length === 0) {
+        alert("Please select at least one .dls file!");
+        return;
       }
-    } else {
-      throw new Error(`Unknown opcode 0x${op.toString(16)}`);
+
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const dlsObj = JSON.parse(reader.result);
+
+            if (dlsObj.dulasType !== decodeType) {
+              alert(`This file is not a ${decodeType}!`);
+              return;
+            }
+
+            let fileContent = dlsObj.content;
+            if (dlsObj.passwordProtected) {
+              if (!password) {
+                alert("This file is password protected. Enter password to decode.");
+                return;
+              }
+              try {
+                fileContent = xorEncryptDecrypt(atob(fileContent), password);
+              } catch (e) {
+                alert("Wrong password or corrupted file!");
+                return;
+              }
+            }
+
+            const link = document.createElement("a");
+            link.href = fileContent;
+            link.download = dlsObj.fileName;
+            link.textContent = `⬇ Download ${dlsObj.fileName}`;
+            output.appendChild(link);
+            output.appendChild(document.createElement("br"));
+
+            if (decodeType === "image") {
+              const img = document.createElement("img");
+              img.src = fileContent;
+              output.appendChild(img);
+            } else if (decodeType === "audio") {
+              const audio = document.createElement("audio");
+              audio.controls = true;
+              audio.src = fileContent;
+              output.appendChild(audio);
+            }
+          } catch (err) {
+            alert("Invalid DULAS file!");
+          }
+        };
+        reader.readAsText(file);
+      });
     }
-  }
-  if(px !== totalPx) throw new Error(`Decoded pixels ${px} != expected ${totalPx}. File may be truncated or corrupt.`);
-
-  return { imageData: new ImageData(out, width, height), width, height };
-}
-
-// ---------- UI Wiring ----------
-const encIn   = document.getElementById('encodeInput');
-const encBtn  = document.getElementById('encodeBtn');
-const encCvs  = document.getElementById('encodeCanvas');
-const encStat = document.getElementById('encodeStat');
-
-const decIn   = document.getElementById('decodeInput');
-const decBtn  = document.getElementById('exportPngBtn');
-const decCvs  = document.getElementById('decodeCanvas');
-const decStat = document.getElementById('decodeStat');
-
-let lastDecodedCanvasURL = null;
-
-encIn.addEventListener('change', async () => {
-  const file = encIn.files?.[0];
-  if(!file){ encBtn.disabled = true; encStat.textContent = 'No image loaded.'; return; }
-  const bmp = await loadImageToBitmap(file);
-  drawToCanvas(bmp, encCvs);
-  encBtn.disabled = false;
-  encStat.textContent = `Loaded: ${file.name} — ${bmp.width}×${bmp.height}`;
-});
-
-encBtn.addEventListener('click', async () => {
-  const ctx = encCvs.getContext('2d', { willReadFrequently: true });
-  if(!ctx){ alert('Canvas not ready'); return; }
-  const { width, height } = encCvs;
-  const imgData = ctx.getImageData(0, 0, width, height);
-
-  const dulas = encodeDULAS(imgData);
-  const rawSize = width * height * 4;
-  const ratio = (dulas.byteLength / rawSize);
-  encStat.textContent = `Encoded DULAS v1 — size: ${formatBytes(dulas.byteLength)} (raw RGBA: ${formatBytes(rawSize)}, ratio: ${ratio.toFixed(3)}x)`;
-
-  const blob = new Blob([dulas], { type: 'application/octet-stream' });
-  downloadBlob(blob, suggestName('image', 'dulas'));
-});
-
-decIn.addEventListener('change', async () => {
-  const file = decIn.files?.[0];
-  if(!file){ decBtn.disabled = true; decStat.textContent = 'No .dulas loaded.'; return; }
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  try{
-    const { imageData, width, height } = decodeDULAS(bytes);
-    decCvs.width = width; decCvs.height = height;
-    const ctx = decCvs.getContext('2d');
-    ctx.putImageData(imageData, 0, 0);
-    decBtn.disabled = false;
-    decStat.textContent = `Decoded: ${file.name} — ${width}×${height} — RGBA ${formatBytes(width*height*4)}`;
-    lastDecodedCanvasURL = null;
-  }catch(err){
-    decBtn.disabled = true;
-    decStat.textContent = `Failed to decode: ${err.message}`;
-    console.error(err);
-  }
-});
-
-decBtn.addEventListener('click', () => {
-  if(!decCvs.width || !decCvs.height){ return; }
-  decCvs.toBlob((blob) => {
-    if(!blob) return;
-    downloadBlob(blob, suggestName('decoded', 'png'));
-  }, 'image/png');
-});
-
-// ---------- Canvas/Image helpers ----------
-async function loadImageToBitmap(file){
-  // Prefer createImageBitmap for speed
-  const blobURL = URL.createObjectURL(file);
-  try {
-    const bmp = await createImageBitmap(await (await fetch(blobURL)).blob());
-    URL.revokeObjectURL(blobURL);
-    return bmp;
-  } catch {
-    URL.revokeObjectURL(blobURL);
-    // Fallback via <img>
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(createImageBitmap(img));
-      img.onerror = reject;
-      img.src = URL.createObjectURL(file);
-    });
-  }
-}
-function drawToCanvas(bitmap, canvas){
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(bitmap, 0, 0);
-}
-
-function downloadBlob(blob, name){
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    URL.revokeObjectURL(a.href);
-    a.remove();
-  }, 0);
-}
-function suggestName(base, ext){
-  const ts = new Date().toISOString().replace(/[:.]/g,'-');
-  return `${base}-${ts}.${ext}`;
-}
-function formatBytes(n){
-  const units = ['B','KB','MB','GB']; let i=0; let v=n;
-  while(v>=1024 && i<units.length-1){ v/=1024; i++; }
-  return `${v.toFixed(v<10 && i>0 ? 2:1)} ${units[i]}`;
-}
-</script>
+  </script>
 </body>
 </html>
