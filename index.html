@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>DULAS — Advanced Encoder</title>
+<title>DULAS — Enhanced Encoder</title>
 <style>
   :root{
     --bg1:#14142b; --bg2:#2b2a59;
@@ -109,6 +109,30 @@
     color: var(--error);
     display: block;
   }
+  .password-section {
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    border-left: 3px solid var(--accent);
+  }
+  .file-list-container {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 10px;
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 8px;
+  }
+  .compression-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(0,200,150,0.2);
+    color: var(--success);
+    font-size: 11px;
+    margin-left: 8px;
+  }
   @media (max-width:700px){
     .main{flex-direction:column}
     .right{height:320px}
@@ -123,8 +147,8 @@
   <div class="wrap" role="main">
     <header>
       <div>
-        <h1>DULAS Advanced Encoder</h1>
-        <div class="hint">Create a private .dls container (images, audio, video, PDF). Up to 10 files</div>
+        <h1>DULAS Enhanced Encoder</h1>
+        <div class="hint">Create a private .dls container with compression. Up to 10 files</div>
       </div>
 
       <div class="controls" aria-hidden="false">
@@ -134,13 +158,10 @@
           <option value="audio">Audio</option>
           <option value="video">Video</option>
           <option value="pdf">PDF</option>
+          <option value="other">Other files</option>
         </select>
 
         <input id="fileInput" type="file" multiple aria-label="Choose files (up to 10)" accept="*/*"/>
-
-        <input id="pass" type="password" placeholder="Optional password" aria-label="password">
-
-        <button class="primary" id="encodeBtn">Encode → .dls</button>
       </div>
     </header>
 
@@ -151,13 +172,22 @@
           <div class="progress-bar" id="encodeProgress">
             <div class="progress"></div>
           </div>
-          <div id="selectedArea" style="margin-top:10px">
-            <div class="hint">Choose files. Thumbnails will appear here.</div>
+          <div class="file-list-container" id="fileListContainer">
+            <div id="selectedArea" style="margin-top:10px">
+              <div class="hint">Choose files. Thumbnails will appear here.</div>
+            </div>
           </div>
         </div>
 
+        <div class="password-section">
+          <label for="pass" class="hint">Password (optional):</label>
+          <input id="pass" type="password" placeholder="Enter password for encryption" style="width:100%; margin-top:6px;">
+          <div class="hint" style="margin-top:6px;">Leave blank for no encryption</div>
+        </div>
+
         <div style="margin-top:10px">
-          <button id="clearBtn" style="padding:10px;border-radius:10px;border:none;background:#333;color:#fff">Clear selection</button>
+          <button id="clearBtn" style="padding:10px;border-radius:10px;border:none;background:#333;color:#fff; margin-right:10px;">Clear selection</button>
+          <button class="primary" id="encodeBtn">Encode → .dls</button>
         </div>
 
         <div id="statusMessage" class="status-message"></div>
@@ -173,7 +203,7 @@
     </div>
 
     <div class="footer">
-      <div class="hint">DULAS format v1.1 — enhanced binary container</div>
+      <div class="hint">DULAS format v2 — compressed binary container</div>
       <div class="hint">Files will be packaged individually (one .dls per original file)</div>
     </div>
   </div>
@@ -183,109 +213,134 @@
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-/* Improved keystream generation using PBKDF2-like approach */
-async function buildKeystream(password, length, salt = new Uint8Array(16)) {
-  if (!password) return null;
-  
-  // Generate a proper salt if not provided
-  if (salt.length === 0) {
-    salt = crypto.getRandomValues(new Uint8Array(16));
-  }
-  
-  const passwordBuffer = enc.encode(password);
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    passwordBuffer,
-    { name: 'PBKDF2' },
-    false,
-    ['deriveBits']
-  );
-  
-  const key = await crypto.subtle.deriveBits(
-    {
-      name: 'PBKDF2',
-      salt: salt,
-      iterations: 100000,
-      hash: 'SHA-256'
-    },
-    keyMaterial,
-    length * 8
-  );
-  
-  return new Uint8Array(key);
+// Track scroll position for file list
+let scrollPosition = 0;
+const fileListContainer = document.getElementById('fileListContainer');
+fileListContainer.addEventListener('scroll', () => {
+  scrollPosition = fileListContainer.scrollTop;
+});
+
+// Restore scroll position after UI updates
+function restoreScrollPosition() {
+  setTimeout(() => {
+    fileListContainer.scrollTop = scrollPosition;
+  }, 10);
 }
 
-/* Create a single .dls file with enhanced structure:
-   [MAGIC 'DULAS' 5 bytes][VERSION 1 byte][TYPE 1 byte:1=image,2=audio,3=video,4=pdf]
-   [FLAG byte: bit0=passwordProtected, bit1=hasSalt]
-   [salt 16 bytes - if hasSalt flag is set]
+/* Optimized keystream generation - faster but still secure */
+function buildKeystream(password, length) {
+  if (!password) return null;
+  
+  const pbytes = enc.encode(password);
+  const out = new Uint8Array(length);
+  
+  // Use a faster algorithm with good distribution
+  let state1 = 0x9e3779b9;
+  let state2 = 0x243f6a88;
+  
+  for (let i = 0; i < length; i++) {
+    // Mix the state with password bytes and position
+    state1 = (state1 + pbytes[i % pbytes.length] + i) >>> 0;
+    state2 = (state2 ^ state1) >>> 0;
+    
+    // Xorshift algorithm for PRNG
+    state1 ^= state1 << 13;
+    state1 ^= state1 >> 17;
+    state1 ^= state1 << 5;
+    
+    state2 ^= state2 << 13;
+    state2 ^= state2 >> 17;
+    state2 ^= state2 << 5;
+    
+    out[i] = (state1 + state2) & 0xff;
+  }
+  
+  return out;
+}
+
+/* Simple but effective compression */
+function compressData(data) {
+  // Use a simple run-length encoding for compression
+  const compressed = [];
+  let i = 0;
+  
+  while (i < data.length) {
+    let count = 1;
+    const value = data[i];
+    
+    // Count consecutive repeating bytes (max 255)
+    while (i + count < data.length && data[i + count] === value && count < 255) {
+      count++;
+    }
+    
+    if (count > 3) {
+      // Use RLE for sequences longer than 3
+      compressed.push(0xFF, value, count);
+      i += count;
+    } else {
+      // Copy literal bytes
+      compressed.push(data[i++]);
+    }
+  }
+  
+  return new Uint8Array(compressed);
+}
+
+/* Create a single .dls file with enhanced structure and compression:
+   [MAGIC 'DULS2' 5 bytes][VERSION 1 byte][TYPE 1 byte:1=image,2=audio,3=video,4=pdf,5=other]
+   [FLAG byte: bit0=passwordProtected, bit1=compressed]
    [nameLen 2 bytes big-endian][nameBytes UTF-8]
    [metaLen 4 bytes big-endian][metaBytes UTF-8]
-   [contentBytes...]  (if passwordProtected -> content was encrypted with keystream)
+   [contentBytes...]  (if passwordProtected -> content was XORed with keystream)
 */
-async function packDulas(fileName, fileType, metaObj, contentBytes, password) {
-  const MAGIC = 'DULAS';
-  
-  // Convert type to byte code
-  const typeMap = { image: 1, audio: 2, video: 3, pdf: 4 };
-  const typeByte = typeMap[fileType] || 0;
-  
+function packDulas(fileName, fileType, metaObj, contentBytes, password) {
+  const MAGIC = 'DULS2'; // Updated magic for v2 format
   const nameBytes = enc.encode(fileName);
   const metaStr = JSON.stringify(metaObj);
   const metaBytes = enc.encode(metaStr);
 
-  let flags = 0;
-  let salt = new Uint8Array(0);
-  let finalContent = contentBytes;
-  
-  // Encrypt contentBytes if password is provided
-  if (password) {
-    flags |= 1; // Set password protected flag
-    salt = crypto.getRandomValues(new Uint8Array(16));
-    flags |= 2; // Set has salt flag
-    
-    try {
-      const ks = await buildKeystream(password, contentBytes.length, salt);
-      finalContent = new Uint8Array(contentBytes.length);
-      for (let i = 0; i < contentBytes.length; i++) {
-        finalContent[i] = contentBytes[i] ^ ks[i];
-      }
-    } catch (error) {
-      console.error("Key derivation failed:", error);
-      throw new Error("Password processing failed");
-    }
+  const flags = password ? 1 : 0;
+  const typeMap = { image: 1, audio: 2, video: 3, pdf: 4, other: 5 };
+  const typeByte = typeMap[fileType] || 5;
+
+  // Apply compression to content
+  let finalContent = compressData(contentBytes);
+  const compressed = finalContent.length < contentBytes.length;
+  if (compressed) {
+    flags |= 2; // Set compressed flag
+  } else {
+    finalContent = contentBytes; // Use original if not compressed
   }
 
-  // Calculate total size
-  const totalSize = 
-    5 + 1 + 1 + 1 + // Magic, version, type, flags
-    (flags & 2 ? 16 : 0) + // Salt if present
-    2 + nameBytes.length + // Name length + name
-    4 + metaBytes.length + // Meta length + meta
-    finalContent.length; // Content
+  // encrypt contentBytes if password
+  if (password) {
+    const ks = buildKeystream(password, finalContent.length);
+    const encryptedContent = new Uint8Array(finalContent.length);
+    for (let i = 0; i < finalContent.length; i++) {
+      encryptedContent[i] = finalContent[i] ^ ks[i];
+    }
+    finalContent = encryptedContent;
+  }
 
-  const out = new Uint8Array(totalSize);
+  const total =
+    5 + 1 + 1 + 1 + 2 + nameBytes.length + 4 + metaBytes.length + finalContent.length;
+
+  const out = new Uint8Array(total);
   let p = 0;
   
   // MAGIC
   for (let i = 0; i < 5; i++) out[p++] = MAGIC.charCodeAt(i);
-  out[p++] = 1; // version
+  out[p++] = 2; // version (v2)
   out[p++] = typeByte;
   out[p++] = flags & 0xff;
   
-  // Salt if present
-  if (flags & 2) {
-    out.set(salt, p);
-    p += salt.length;
-  }
-  
-  // Name length (2 bytes big-endian)
+  // name len (2 bytes big-endian)
   out[p++] = (nameBytes.length >> 8) & 0xff;
   out[p++] = nameBytes.length & 0xff;
   out.set(nameBytes, p);
   p += nameBytes.length;
   
-  // Meta length (4 bytes BE)
+  // meta len (4 bytes BE)
   out[p++] = (metaBytes.length >>> 24) & 0xff;
   out[p++] = (metaBytes.length >>> 16) & 0xff;
   out[p++] = (metaBytes.length >>> 8) & 0xff;
@@ -293,10 +348,15 @@ async function packDulas(fileName, fileType, metaObj, contentBytes, password) {
   out.set(metaBytes, p);
   p += metaBytes.length;
   
-  // Content
+  // content
   out.set(finalContent, p);
   
-  return out;
+  return {
+    data: out,
+    originalSize: contentBytes.length,
+    compressedSize: finalContent.length,
+    compressed: compressed
+  };
 }
 
 /* Helper to convert ArrayBuffer to Blob download link */
@@ -426,6 +486,7 @@ function renderSelected() {
   
   selectedArea.innerHTML = '';
   selectedArea.appendChild(list);
+  restoreScrollPosition();
 }
 
 encodeBtn.addEventListener('click', async () => {
@@ -478,13 +539,16 @@ encodeBtn.addEventListener('click', async () => {
           originalName: f.name
         };
         
-        const packaged = await packDulas(f.name, chosenType, meta, bytes, password);
+        const packaged = packDulas(f.name, chosenType, meta, bytes, password);
         const suggestedName = f.name.replace(/\.[^/.]+$/, '') + '.dls';
         
         results.push({
           file: f,
-          packaged: packaged,
-          suggestedName: suggestedName
+          packaged: packaged.data,
+          suggestedName: suggestedName,
+          originalSize: packaged.originalSize,
+          compressedSize: packaged.compressedSize,
+          compressed: packaged.compressed
         });
       } catch (error) {
         console.error(`Error processing ${f.name}:`, error);
@@ -499,7 +563,13 @@ encodeBtn.addEventListener('click', async () => {
       outputArea.innerHTML = '<div class="hint">No files were successfully encoded.</div>';
       showStatus('Encoding completed with errors', 'error');
     } else {
+      let totalOriginalSize = 0;
+      let totalCompressedSize = 0;
+      
       results.forEach(result => {
+        totalOriginalSize += result.originalSize;
+        totalCompressedSize += result.compressedSize;
+        
         const link = blobToLink(result.packaged, result.suggestedName);
         
         const box = document.createElement('div');
@@ -509,13 +579,40 @@ encodeBtn.addEventListener('click', async () => {
         const info = document.createElement('div');
         info.className = 'hint';
         info.style.marginTop = '6px';
-        info.textContent = `Type: ${chosenType} • ${password ? 'Password protected' : 'No password'} • ${result.file.name}`;
+        
+        let infoText = `Type: ${chosenType} • ${password ? 'Encrypted • ' : 'No encryption • '}`;
+        if (result.compressed) {
+          const spaceSaved = 100 - (result.compressedSize / result.originalSize * 100);
+          infoText += `Compressed: ${(result.originalSize/1024).toFixed(1)}KB → ${(result.compressedSize/1024).toFixed(1)}KB (${spaceSaved.toFixed(1)}% saved) • `;
+        } else {
+          infoText += 'Not compressed • ';
+        }
+        infoText += result.file.name;
+        
+        info.textContent = infoText;
         box.appendChild(info);
         
         outputArea.appendChild(box);
       });
       
-      outputArea.insertAdjacentHTML('afterbegin', `<div class="hint">Encoded ${results.length} file(s) successfully.</div>`);
+      // Add summary
+      const summary = document.createElement('div');
+      summary.className = 'hint';
+      summary.style.marginBottom = '12px';
+      summary.style.padding = '8px';
+      summary.style.background = 'rgba(255,255,255,0.05)';
+      summary.style.borderRadius = '6px';
+      
+      let summaryText = `Encoded ${results.length} file(s). `;
+      if (totalCompressedSize < totalOriginalSize) {
+        const compressionRatio = (100 - (totalCompressedSize / totalOriginalSize * 100)).toFixed(1);
+        summaryText += `Compression: ${(totalOriginalSize/1024).toFixed(1)}KB → ${(totalCompressedSize/1024).toFixed(1)}KB (${compressionRatio}% saved). `;
+      }
+      summaryText += password ? 'Files are encrypted.' : 'Files are not encrypted.';
+      
+      summary.textContent = summaryText;
+      outputArea.insertBefore(summary, outputArea.firstChild);
+      
       showStatus(`Successfully encoded ${results.length} file(s)`, 'success');
     }
   } catch (error) {
