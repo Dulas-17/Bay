@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DLS Decoder · Unpacker</title>
     <style>
-        /* ── compact, dark UI ── */
+        /* ── compact, dark UI (same as before) ── */
         *,
         *::before,
         *::after {
@@ -438,7 +438,7 @@
         </div>
 
         <footer style="margin-top:1.5rem;font-size:0.75rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:1rem;">
-            DLS Decoder v3 · AES-256-CBC · PBKDF2 600k · gzip decompression · Client-side
+            DLS Decoder v4 · AES-256-CBC · PBKDF2 600k · gzip decompression · Client-side
         </footer>
     </div>
 
@@ -692,7 +692,6 @@
                         statusLabel.textContent = '⏳ Decrypting…';
 
                         try {
-                            // 1. Decrypt
                             const decryptedBuffer = await decryptData(
                                 item.container.data,
                                 password,
@@ -700,7 +699,6 @@
                                 item.container.iv
                             );
 
-                            // 2. Decompress if needed
                             let finalBuffer;
                             if (item.container.compressed === true) {
                                 try {
@@ -712,7 +710,6 @@
                                 finalBuffer = decryptedBuffer;
                             }
 
-                            // 3. Restore file
                             const blob = new Blob([finalBuffer], {
                                 type: item.container.fileType || 'application/octet-stream'
                             });
@@ -764,9 +761,7 @@
                         statusLabel.textContent = '⏳ Extracting…';
 
                         try {
-                            // 1. Decode base64
                             const raw = Uint8Array.from(atob(item.container.data), c => c.charCodeAt(0));
-                            // 2. Decompress if needed
                             let finalBuffer;
                             if (item.container.compressed === true) {
                                 try {
@@ -816,7 +811,7 @@
                 });
             }
 
-            // ─── Load DLS files ────────────────────────────────────────
+            // ─── Load DLS files: REPLACE list ─────────────────────────
 
             fileInput.addEventListener('change', async (e) => {
                 const files = Array.from(e.target.files).filter(f =>
@@ -828,20 +823,16 @@
                     return;
                 }
 
+                // Clear previous items
+                dlsItems = [];
+                idCounter = 0;
+
                 let loaded = 0;
                 let errors = 0;
 
                 for (const file of files) {
                     try {
                         const container = await parseDLSFile(file);
-                        const dup = dlsItems.some(it =>
-                            it.container.fileName === container.fileName &&
-                            it.container.fileSize === container.fileSize
-                        );
-                        if (dup) {
-                            showToast(`Skipped duplicate: ${container.fileName}`, 'info', 1500);
-                            continue;
-                        }
                         dlsItems.push({
                             id: ++idCounter,
                             file: file,
@@ -890,6 +881,10 @@
                     showToast('Please drop .dls files only.', 'error', 2000);
                     return;
                 }
+                // Replace list
+                dlsItems = [];
+                idCounter = 0;
+                // Manually trigger change by setting files and dispatching event
                 const dt = new DataTransfer();
                 files.forEach(f => dt.items.add(f));
                 fileInput.files = dt.files;
@@ -898,7 +893,7 @@
 
             renderCards();
 
-            console.log('🔓 DLS Decoder v3 ready (PBKDF2 600k iterations, gzip decompression)');
+            console.log('🔓 DLS Decoder v4 ready (PBKDF2 600k, gzip decompression, replace on selection)');
         })();
     </script>
 </body>
