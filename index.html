@@ -407,7 +407,7 @@
                 🔓 DLS Decoder
                 <small>· Unpacker</small>
             </h1>
-            <p class="subhead">Load <strong>.dls</strong> files, decrypt if needed, and restore the original files.</p>
+            <p class="subhead">Load <strong>.dls</strong> files, decrypt if needed, decompress, and restore the original files.</p>
         </header>
 
         <div class="card">
@@ -438,7 +438,7 @@
         </div>
 
         <footer style="margin-top:1.5rem;font-size:0.75rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:1rem;">
-            DLS Decoder v2 · AES-256-CBC · PBKDF2 600k iterations · Client-side only
+            DLS Decoder v3 · AES-256-CBC · PBKDF2 600k · gzip decompression · Client-side
         </footer>
     </div>
 
@@ -515,6 +515,21 @@
                 return i > 0 ? filename.slice(0, i) : filename;
             }
 
+            // ─── Decompression ──────────────────────────────────────────
+            async function decompressData(arrayBuffer) {
+                if (!window.DecompressionStream) {
+                    throw new Error('DecompressionStream not supported');
+                }
+                try {
+                    const blob = new Blob([arrayBuffer]);
+                    const stream = blob.stream().pipeThrough(new DecompressionStream('gzip'));
+                    const decompressedBlob = await new Response(stream).blob();
+                    return await decompressedBlob.arrayBuffer();
+                } catch (e) {
+                    throw new Error('Decompression failed: ' + e.message);
+                }
+            }
+
             // ─── Decryption ──────────────────────────────────────────
             const PBKDF2_ITERATIONS = 600000;
 
@@ -563,7 +578,7 @@
                 } catch (_) {
                     throw new Error('Invalid DLS format: not valid JSON');
                 }
-                const required = ['version', 'fileName', 'fileType', 'fileSize', 'encrypted', 'data'];
+                const required = ['version', 'fileName', 'fileType', 'fileSize', 'encrypted', 'compressed', 'data'];
                 for (const k of required) {
                     if (!(k in container)) throw new Error(`Missing required field: ${k}`);
                 }
@@ -595,6 +610,7 @@
                 for (const item of dlsItems) {
                     const c = item.container;
                     const isEncrypted = c.encrypted === true;
+                    const isCompressed = c.compressed === true;
                     const ext = getFileExtension(c.fileName);
                     const baseName = getBaseName(c.fileName);
                     const sizeStr = formatSize(c.fileSize);
@@ -616,6 +632,7 @@
                                 <span class="badge ${statusClass}">${statusLabel}</span>
                                 <span>${sizeStr}</span>
                                 <span style="opacity:0.5;">${c.fileType || 'unknown'}</span>
+                                ${isCompressed ? '<span style="opacity:0.6;">📦 compressed</span>' : ''}
                             </div>
                     `;
 
@@ -675,13 +692,28 @@
                         statusLabel.textContent = '⏳ Decrypting…';
 
                         try {
+                            // 1. Decrypt
                             const decryptedBuffer = await decryptData(
                                 item.container.data,
                                 password,
                                 item.container.salt,
                                 item.container.iv
                             );
-                            const blob = new Blob([decryptedBuffer], {
+
+                            // 2. Decompress if needed
+                            let finalBuffer;
+                            if (item.container.compressed === true) {
+                                try {
+                                    finalBuffer = await decompressData(decryptedBuffer);
+                                } catch (decompErr) {
+                                    throw new Error('Decompression failed: ' + decompErr.message);
+                                }
+                            } else {
+                                finalBuffer = decryptedBuffer;
+                            }
+
+                            // 3. Restore file
+                            const blob = new Blob([finalBuffer], {
                                 type: item.container.fileType || 'application/octet-stream'
                             });
                             const url = URL.createObjectURL(blob);
@@ -708,12 +740,12 @@
                             btn.disabled = true;
                         } catch (err) {
                             console.error('Decryption error', err);
-                            errorEl.textContent = '❌ Invalid password or corrupted data.';
+                            errorEl.textContent = '❌ ' + (err.message || 'Invalid password or corrupted data.');
                             errorEl.classList.add('visible');
                             statusLabel.textContent = '❌ Decryption failed';
                             btn.innerHTML = '🔓 Decrypt';
                             btn.disabled = false;
-                            showToast('Decryption failed. Check password.', 'error', 3000);
+                            showToast('Decryption failed. Check password or file integrity.', 'error', 3000);
                         }
                     });
                 });
@@ -732,8 +764,21 @@
                         statusLabel.textContent = '⏳ Extracting…';
 
                         try {
+                            // 1. Decode base64
                             const raw = Uint8Array.from(atob(item.container.data), c => c.charCodeAt(0));
-                            const blob = new Blob([raw], {
+                            // 2. Decompress if needed
+                            let finalBuffer;
+                            if (item.container.compressed === true) {
+                                try {
+                                    finalBuffer = await decompressData(raw.buffer);
+                                } catch (decompErr) {
+                                    throw new Error('Decompression failed: ' + decompErr.message);
+                                }
+                            } else {
+                                finalBuffer = raw.buffer;
+                            }
+
+                            const blob = new Blob([finalBuffer], {
                                 type: item.container.fileType || 'application/octet-stream'
                             });
                             const url = URL.createObjectURL(blob);
@@ -755,7 +800,7 @@
                             statusLabel.textContent = '❌ Extraction failed';
                             btn.innerHTML = '⬇️ Extract';
                             btn.disabled = false;
-                            showToast('Extraction failed.', 'error', 3000);
+                            showToast('Extraction failed: ' + err.message, 'error', 3000);
                         }
                     });
                 });
@@ -853,7 +898,7 @@
 
             renderCards();
 
-            console.log('🔓 DLS Decoder v2 ready (PBKDF2 600k iterations)');
+            console.log('🔓 DLS Decoder v3 ready (PBKDF2 600k iterations, gzip decompression)');
         })();
     </script>
 </body>
