@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DLS Decoder · Unpacker</title>
     <style>
-        /* ── compact, dark UI (same as before) ── */
+        /* ── compact, dark UI ── */
         *,
         *::before,
         *::after {
@@ -111,9 +111,6 @@
             cursor: pointer;
             margin-right: 0.8rem;
         }
-        input[type="file"]::file-selector-button:hover {
-            background: var(--accent-hover);
-        }
         .btn {
             display: inline-flex;
             align-items: center;
@@ -178,7 +175,7 @@
         }
         .cards-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 0.8rem;
             margin-top: 0.8rem;
         }
@@ -301,9 +298,7 @@
             animation: spin 0.6s linear infinite;
         }
         @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
+            to { transform: rotate(360deg); }
         }
         .status-bar {
             margin-top: 0.8rem;
@@ -362,41 +357,17 @@
             color: var(--text-muted);
         }
         @media (max-width: 600px) {
-            body {
-                padding: 0.8rem;
-            }
-            .card {
-                padding: 0.8rem 1rem;
-            }
-            .cards-grid {
-                grid-template-columns: 1fr;
-            }
-            h1 {
-                font-size: 1.4rem;
-            }
-            .file-card .card-title .name-trunc {
-                max-width: 120px;
-            }
-            .status-bar {
-                flex-direction: column;
-                align-items: stretch;
-                text-align: center;
-            }
+            body { padding: 0.8rem; }
+            .card { padding: 0.8rem 1rem; }
+            .cards-grid { grid-template-columns: 1fr; }
+            h1 { font-size: 1.4rem; }
+            .file-card .card-title .name-trunc { max-width: 120px; }
+            .status-bar { flex-direction: column; align-items: stretch; text-align: center; }
         }
-        ::-webkit-scrollbar {
-            width: 5px;
-            height: 5px;
-        }
-        ::-webkit-scrollbar-track {
-            background: var(--bg);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--text-muted);
-        }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
     </style>
 </head>
 <body>
@@ -405,9 +376,9 @@
         <header style="margin-bottom:1.2rem;">
             <h1>
                 🔓 DLS Decoder
-                <small>· Unpacker</small>
+                <small>· chunked + per‑file passwords</small>
             </h1>
-            <p class="subhead">Load <strong>.dls</strong> files, decrypt if needed, decompress, and restore the original files.</p>
+            <p class="subhead">Load <strong>.dls</strong> files, decrypt & decompress chunked data, restore originals.</p>
         </header>
 
         <div class="card">
@@ -438,7 +409,7 @@
         </div>
 
         <footer style="margin-top:1.5rem;font-size:0.75rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:1rem;">
-            DLS Decoder v4 · AES-256-CBC · PBKDF2 600k · gzip decompression · Client-side
+            DLS Decoder v5 · AES-256-CBC · PBKDF2 600k · gzip · chunked · per‑file passwords
         </footer>
     </div>
 
@@ -474,7 +445,6 @@
 
             // Toast
             let toastTimer = null;
-
             function showToast(msg, type = 'info', duration = 3000) {
                 if (toastTimer) {
                     clearTimeout(toastTimer);
@@ -515,8 +485,17 @@
                 return i > 0 ? filename.slice(0, i) : filename;
             }
 
-            // ─── Decompression ──────────────────────────────────────────
-            async function decompressData(arrayBuffer) {
+            // ─── Helpers ──────────────────────────────────────────────
+            function base64ToArrayBuffer(base64) {
+                const binary = atob(base64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                return bytes.buffer;
+            }
+
+            async function decompressChunk(arrayBuffer) {
                 if (!window.DecompressionStream) {
                     throw new Error('DecompressionStream not supported');
                 }
@@ -544,27 +523,23 @@
                     ['deriveKey']
                 );
                 return crypto.subtle.deriveKey({
-                        name: 'PBKDF2',
-                        salt: salt,
-                        iterations: PBKDF2_ITERATIONS,
-                        hash: 'SHA-256'
-                    },
-                    keyMaterial, {
-                        name: 'AES-CBC',
-                        length: 256
-                    },
-                    false,
-                    ['encrypt', 'decrypt']
-                );
+                    name: 'PBKDF2',
+                    salt: salt,
+                    iterations: PBKDF2_ITERATIONS,
+                    hash: 'SHA-256'
+                }, keyMaterial, {
+                    name: 'AES-CBC',
+                    length: 256
+                }, false, ['encrypt', 'decrypt']);
             }
 
-            async function decryptData(encryptedBase64, password, saltBase64, ivBase64) {
-                const encrypted = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+            async function decryptChunk(encryptedBuffer, password, saltBase64, ivBase64) {
+                const salt = Uint8Array.from(atob(saltBase64), c => c.charCodeAt(0));
                 const iv = Uint8Array.from(atob(ivBase64), c => c.charCodeAt(0));
                 const key = await deriveKey(password, saltBase64);
                 const decrypted = await crypto.subtle.decrypt({ name: 'AES-CBC', iv },
                     key,
-                    encrypted
+                    encryptedBuffer
                 );
                 return decrypted;
             }
@@ -578,19 +553,53 @@
                 } catch (_) {
                     throw new Error('Invalid DLS format: not valid JSON');
                 }
-                const required = ['version', 'fileName', 'fileType', 'fileSize', 'encrypted', 'compressed', 'data'];
-                for (const k of required) {
-                    if (!(k in container)) throw new Error(`Missing required field: ${k}`);
+                // Check required fields: version, fileName, fileType, fileSize, chunked (or chunks)
+                // We support both new chunked format and old single-data format for backward compatibility
+                if (!container.version || container.version !== '1.0') {
+                    throw new Error('Unsupported DLS version');
                 }
-                if (container.version !== '1.0') {
-                    throw new Error(`Unsupported DLS version: ${container.version}`);
+                if (!container.fileName || typeof container.fileName !== 'string') {
+                    throw new Error('Missing fileName');
                 }
-                if (container.encrypted) {
-                    if (!container.salt || !container.iv) {
-                        throw new Error('Encrypted container missing salt or iv');
+                if (!container.fileType) container.fileType = 'application/octet-stream';
+                if (typeof container.fileSize !== 'number') container.fileSize = 0;
+
+                // New chunked format
+                if (container.chunked === true && Array.isArray(container.chunks) && container.chunks.length > 0) {
+                    // Validate each chunk has data and if encrypted has salt/iv
+                    for (const chunk of container.chunks) {
+                        if (!chunk.data) throw new Error('Chunk missing data');
+                        if (chunk.encrypted && (!chunk.salt || !chunk.iv)) {
+                            throw new Error('Encrypted chunk missing salt or iv');
+                        }
                     }
+                    return container;
                 }
-                return container;
+
+                // Old single-data format (legacy)
+                if (container.data) {
+                    // Convert to chunked format
+                    const encrypted = container.encrypted || false;
+                    const salt = container.salt || '';
+                    const iv = container.iv || '';
+                    const chunks = [{
+                        index: 0,
+                        encrypted: encrypted,
+                        salt: salt,
+                        iv: iv,
+                        data: container.data
+                    }];
+                    return {
+                        version: '1.0',
+                        fileName: container.fileName,
+                        fileType: container.fileType || 'application/octet-stream',
+                        fileSize: container.fileSize || 0,
+                        chunked: false, // we'll treat as single chunk
+                        chunks: chunks
+                    };
+                }
+
+                throw new Error('Invalid container: missing data or chunks');
             }
 
             // ─── Render Cards ──────────────────────────────────────────
@@ -609,8 +618,7 @@
                 let html = '<div class="cards-grid">';
                 for (const item of dlsItems) {
                     const c = item.container;
-                    const isEncrypted = c.encrypted === true;
-                    const isCompressed = c.compressed === true;
+                    const isEncrypted = c.chunks.some(chunk => chunk.encrypted === true);
                     const ext = getFileExtension(c.fileName);
                     const baseName = getBaseName(c.fileName);
                     const sizeStr = formatSize(c.fileSize);
@@ -632,7 +640,7 @@
                                 <span class="badge ${statusClass}">${statusLabel}</span>
                                 <span>${sizeStr}</span>
                                 <span style="opacity:0.5;">${c.fileType || 'unknown'}</span>
-                                ${isCompressed ? '<span style="opacity:0.6;">📦 compressed</span>' : ''}
+                                ${c.chunks.length > 1 ? `<span style="opacity:0.6;">📦 ${c.chunks.length} chunks</span>` : ''}
                             </div>
                     `;
 
@@ -666,7 +674,7 @@
                 cardsCount.textContent = `${dlsItems.length}`;
                 statusCount.textContent = `${dlsItems.length} loaded`;
 
-                // --- Event bindings ---
+                // ─── Event bindings ──────────────────────────────────
 
                 // Decrypt buttons
                 container.querySelectorAll('.decrypt-btn').forEach(btn => {
@@ -692,25 +700,31 @@
                         statusLabel.textContent = '⏳ Decrypting…';
 
                         try {
-                            const decryptedBuffer = await decryptData(
-                                item.container.data,
-                                password,
-                                item.container.salt,
-                                item.container.iv
-                            );
+                            // Process each chunk
+                            const chunks = item.container.chunks;
+                            const decryptedChunks = [];
 
-                            let finalBuffer;
-                            if (item.container.compressed === true) {
-                                try {
-                                    finalBuffer = await decompressData(decryptedBuffer);
-                                } catch (decompErr) {
-                                    throw new Error('Decompression failed: ' + decompErr.message);
+                            for (const chunk of chunks) {
+                                let chunkBuffer = base64ToArrayBuffer(chunk.data);
+                                if (chunk.encrypted) {
+                                    chunkBuffer = await decryptChunk(chunkBuffer, password, chunk.salt, chunk.iv);
                                 }
-                            } else {
-                                finalBuffer = decryptedBuffer;
+                                // Decompress the chunk
+                                const decompressed = await decompressChunk(chunkBuffer);
+                                decryptedChunks.push(decompressed);
                             }
 
-                            const blob = new Blob([finalBuffer], {
+                            // Concatenate all chunks
+                            const totalLength = decryptedChunks.reduce((sum, buf) => sum + buf.byteLength, 0);
+                            const combined = new Uint8Array(totalLength);
+                            let offset = 0;
+                            for (const buf of decryptedChunks) {
+                                combined.set(new Uint8Array(buf), offset);
+                                offset += buf.byteLength;
+                            }
+
+                            // Restore file
+                            const blob = new Blob([combined.buffer], {
                                 type: item.container.fileType || 'application/octet-stream'
                             });
                             const url = URL.createObjectURL(blob);
@@ -761,19 +775,28 @@
                         statusLabel.textContent = '⏳ Extracting…';
 
                         try {
-                            const raw = Uint8Array.from(atob(item.container.data), c => c.charCodeAt(0));
-                            let finalBuffer;
-                            if (item.container.compressed === true) {
-                                try {
-                                    finalBuffer = await decompressData(raw.buffer);
-                                } catch (decompErr) {
-                                    throw new Error('Decompression failed: ' + decompErr.message);
+                            const chunks = item.container.chunks;
+                            const decryptedChunks = [];
+
+                            for (const chunk of chunks) {
+                                let chunkBuffer = base64ToArrayBuffer(chunk.data);
+                                // Should not be encrypted, but if it is, we can't extract without password
+                                if (chunk.encrypted) {
+                                    throw new Error('Cannot extract encrypted chunk without password');
                                 }
-                            } else {
-                                finalBuffer = raw.buffer;
+                                const decompressed = await decompressChunk(chunkBuffer);
+                                decryptedChunks.push(decompressed);
                             }
 
-                            const blob = new Blob([finalBuffer], {
+                            const totalLength = decryptedChunks.reduce((sum, buf) => sum + buf.byteLength, 0);
+                            const combined = new Uint8Array(totalLength);
+                            let offset = 0;
+                            for (const buf of decryptedChunks) {
+                                combined.set(new Uint8Array(buf), offset);
+                                offset += buf.byteLength;
+                            }
+
+                            const blob = new Blob([combined.buffer], {
                                 type: item.container.fileType || 'application/octet-stream'
                             });
                             const url = URL.createObjectURL(blob);
@@ -811,7 +834,7 @@
                 });
             }
 
-            // ─── Load DLS files: REPLACE list ─────────────────────────
+            // ─── Load DLS files ────────────────────────────────────────
 
             fileInput.addEventListener('change', async (e) => {
                 const files = Array.from(e.target.files).filter(f =>
@@ -881,10 +904,6 @@
                     showToast('Please drop .dls files only.', 'error', 2000);
                     return;
                 }
-                // Replace list
-                dlsItems = [];
-                idCounter = 0;
-                // Manually trigger change by setting files and dispatching event
                 const dt = new DataTransfer();
                 files.forEach(f => dt.items.add(f));
                 fileInput.files = dt.files;
@@ -893,7 +912,7 @@
 
             renderCards();
 
-            console.log('🔓 DLS Decoder v4 ready (PBKDF2 600k, gzip decompression, replace on selection)');
+            console.log('🔓 DLS Decoder v5 ready (chunked, per‑file passwords)');
         })();
     </script>
 </body>
