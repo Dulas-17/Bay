@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DLS Decoder · Unpacker</title>
     <style>
-        /* ── compact, dark UI ── */
+        /* ── same as before ── */
         *,
         *::before,
         *::after {
@@ -22,15 +22,13 @@
             --text-muted: #8b949e;
             --accent: #58a6ff;
             --accent-hover: #79c0ff;
-            --danger: #f85149;
             --success: #3fb950;
+            --danger: #f85149;
             --radius: 10px;
-            --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            --shadow: 0 8px 24px rgba(0,0,0,0.5);
             --font: -apple-system, 'Segoe UI', Roboto, sans-serif;
         }
-        html {
-            scroll-behavior: smooth;
-        }
+        html { scroll-behavior: smooth; }
         body {
             background: var(--bg);
             color: var(--text);
@@ -41,10 +39,7 @@
             flex-direction: column;
             align-items: center;
         }
-        .container {
-            max-width: 960px;
-            width: 100%;
-        }
+        .container { max-width: 960px; width: 100%; }
         h1 {
             font-size: 1.7rem;
             font-weight: 600;
@@ -54,16 +49,8 @@
             flex-wrap: wrap;
             margin-bottom: 0.2rem;
         }
-        h1 small {
-            font-size: 0.8rem;
-            font-weight: 400;
-            color: var(--text-muted);
-        }
-        .subhead {
-            color: var(--text-muted);
-            margin-bottom: 1.5rem;
-            font-size: 0.9rem;
-        }
+        h1 small { font-size: 0.8rem; font-weight: 400; color: var(--text-muted); }
+        .subhead { color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.9rem; }
         .card {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -80,10 +67,7 @@
             gap: 0.3rem;
             margin-bottom: 0.8rem;
         }
-        .card-header h2 {
-            font-size: 1.1rem;
-            font-weight: 500;
-        }
+        .card-header h2 { font-size: 1.1rem; font-weight: 500; }
         input[type="file"] {
             display: block;
             width: 100%;
@@ -96,10 +80,7 @@
             cursor: pointer;
             transition: border-color 0.25s, background 0.25s;
         }
-        input[type="file"]:hover {
-            border-color: var(--accent);
-            background: #1f2937;
-        }
+        input[type="file"]:hover { border-color: var(--accent); background: #1f2937; }
         input[type="file"]::file-selector-button {
             background: var(--accent);
             color: #0d1117;
@@ -125,54 +106,23 @@
             background: var(--accent);
             color: #0d1117;
         }
-        .btn:hover:not(:disabled) {
-            background: var(--accent-hover);
-            transform: scale(1.01);
-        }
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .btn-success {
-            background: var(--success);
-            color: #0d1117;
-        }
-        .btn-success:hover:not(:disabled) {
-            background: #4cda64;
-        }
-        .btn-danger {
-            background: var(--danger);
-            color: #fff;
-        }
-        .btn-danger:hover:not(:disabled) {
-            background: #ff6b6b;
-        }
-        .btn-sm {
-            padding: 0.2rem 0.8rem;
-            font-size: 0.75rem;
-        }
-        .file-input-wrap {
-            position: relative;
-        }
-        .file-input-wrap input[type="file"] {
-            padding: 0.7rem 0.8rem;
-        }
-        .drag-over {
-            border-color: var(--accent) !important;
-            background: #1f2937 !important;
-        }
+        .btn:hover:not(:disabled) { background: var(--accent-hover); transform: scale(1.01); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-success { background: var(--success); color: #0d1117; }
+        .btn-success:hover:not(:disabled) { background: #4cda64; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover:not(:disabled) { background: #ff6b6b; }
+        .btn-sm { padding: 0.2rem 0.8rem; font-size: 0.75rem; }
+        .file-input-wrap { position: relative; }
+        .file-input-wrap input[type="file"] { padding: 0.7rem 0.8rem; }
+        .drag-over { border-color: var(--accent) !important; background: #1f2937 !important; }
         .empty-state {
             padding: 1rem 0.5rem;
             text-align: center;
             color: var(--text-muted);
             font-size: 0.9rem;
         }
-        .empty-state .icon {
-            font-size: 2rem;
-            margin-bottom: 0.2rem;
-            opacity: 0.4;
-        }
+        .empty-state .icon { font-size: 2rem; margin-bottom: 0.2rem; opacity: 0.4; }
         .cards-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -190,10 +140,7 @@
             gap: 0.4rem;
             font-size: 0.85rem;
         }
-        .file-card:hover {
-            border-color: var(--text-muted);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        }
+        .file-card:hover { border-color: var(--text-muted); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
         .file-card .card-title {
             font-weight: 600;
             font-size: 0.95rem;
@@ -232,26 +179,20 @@
             font-size: 0.65rem;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.03em;
             background: var(--surface);
             color: var(--text-muted);
             border: 1px solid var(--border);
         }
-        .badge.locked {
-            border-color: var(--warning);
-            color: var(--warning);
-        }
-        .badge.unlocked {
-            border-color: var(--success);
-            color: var(--success);
-        }
+        .badge.locked { border-color: #d29922; color: #d29922; }
+        .badge.unlocked { border-color: var(--success); color: var(--success); }
         .file-card .password-group {
             display: flex;
             gap: 0.3rem;
             flex-wrap: wrap;
             margin-top: 0.2rem;
         }
-        .file-card .password-group input[type="password"] {
+        .file-card .password-group input[type="password"],
+        .file-card .password-group input[type="text"] {
             flex: 1 1 120px;
             padding: 0.3rem 0.6rem;
             background: var(--bg);
@@ -264,8 +205,17 @@
         .file-card .password-group input:focus {
             outline: none;
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.12);
+            box-shadow: 0 0 0 3px rgba(88,166,255,0.12);
         }
+        .file-card .password-group .toggle-pwd {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.9rem;
+            padding: 0 0.2rem;
+        }
+        .file-card .password-group .toggle-pwd:hover { color: var(--text); }
         .file-card .action-row {
             display: flex;
             gap: 0.4rem;
@@ -278,9 +228,7 @@
             margin-top: 0.2rem;
             display: none;
         }
-        .file-card .error-msg.visible {
-            display: block;
-        }
+        .file-card .error-msg.visible { display: block; }
         .file-card .status-text {
             font-size: 0.75rem;
             color: var(--text-muted);
@@ -297,9 +245,7 @@
             border-radius: 50%;
             animation: spin 0.6s linear infinite;
         }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
         .status-bar {
             margin-top: 0.8rem;
             padding: 0.4rem 0.8rem;
@@ -313,12 +259,8 @@
             gap: 0.3rem;
             min-height: 2.5rem;
         }
-        .status-bar .progress-text {
-            color: var(--text-muted);
-        }
-        .status-bar .count {
-            font-weight: 500;
-        }
+        .status-bar .progress-text { color: var(--text-muted); }
+        .status-bar .count { font-weight: 500; }
         .toast {
             position: fixed;
             bottom: 2rem;
@@ -332,30 +274,16 @@
             font-weight: 500;
             font-size: 0.9rem;
             opacity: 0;
-            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s;
+            transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s;
             pointer-events: none;
             z-index: 999;
             max-width: 90%;
         }
-        .toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-            pointer-events: auto;
-        }
-        .toast.error {
-            border-color: var(--danger);
-        }
-        .toast.success {
-            border-color: var(--success);
-        }
-        .flex {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-        }
-        .text-muted {
-            color: var(--text-muted);
-        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+        .toast.error { border-color: var(--danger); }
+        .toast.success { border-color: var(--success); }
+        .flex { display: flex; align-items: center; gap: 0.4rem; }
+        .text-muted { color: var(--text-muted); }
         @media (max-width: 600px) {
             body { padding: 0.8rem; }
             .card { padding: 0.8rem 1rem; }
@@ -374,11 +302,8 @@
 
     <div class="container" id="app">
         <header style="margin-bottom:1.2rem;">
-            <h1>
-                🔓 DLS Decoder
-                <small>· chunked + per‑file passwords</small>
-            </h1>
-            <p class="subhead">Load <strong>.dls</strong> files, decrypt & decompress chunked data, restore originals.</p>
+            <h1>🔓 DLS Decoder <small>· backward compatible</small></h1>
+            <p class="subhead">Load <strong>.dls</strong> files (any version), decrypt, decompress, restore originals.</p>
         </header>
 
         <div class="card">
@@ -397,10 +322,7 @@
                 <span class="text-muted" id="cardsCount">0</span>
             </div>
             <div id="cardsContainer">
-                <div class="empty-state">
-                    <div class="icon">📭</div>
-                    <p>No .dls files loaded yet.</p>
-                </div>
+                <div class="empty-state"><div class="icon">📭</div><p>No .dls files loaded yet.</p></div>
             </div>
             <div class="status-bar" id="statusBar">
                 <span class="progress-text">Ready</span>
@@ -409,7 +331,7 @@
         </div>
 
         <footer style="margin-top:1.5rem;font-size:0.75rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:1rem;">
-            DLS Decoder v5 · AES-256-CBC · PBKDF2 600k · gzip · chunked · per‑file passwords
+            DLS Decoder v7 · AES-256-CBC · PBKDF2 600k · gzip · chunked · encrypted metadata · backwards compatible
         </footer>
     </div>
 
@@ -431,35 +353,24 @@
             let idCounter = 0;
 
             // Scroll persistence
-            function saveScroll() {
-                localStorage.setItem('dls_decoder_scroll', String(window.scrollY));
-            }
+            function saveScroll() { localStorage.setItem('dls_decoder_scroll', String(window.scrollY)); }
             window.addEventListener('scroll', saveScroll);
             window.addEventListener('load', () => {
                 const pos = localStorage.getItem('dls_decoder_scroll');
-                if (pos) {
-                    const y = parseInt(pos, 10);
-                    if (!isNaN(y)) window.scrollTo(0, y);
-                }
+                if (pos) { const y = parseInt(pos, 10); if (!isNaN(y)) window.scrollTo(0, y); }
             });
 
             // Toast
             let toastTimer = null;
             function showToast(msg, type = 'info', duration = 3000) {
-                if (toastTimer) {
-                    clearTimeout(toastTimer);
-                    toast.classList.remove('show', 'error', 'success');
-                }
+                if (toastTimer) { clearTimeout(toastTimer); toast.classList.remove('show','error','success'); }
                 toast.textContent = msg;
                 toast.className = 'toast';
                 if (type === 'error') toast.classList.add('error');
                 if (type === 'success') toast.classList.add('success');
                 void toast.offsetWidth;
                 toast.classList.add('show');
-                toastTimer = setTimeout(() => {
-                    toast.classList.remove('show');
-                    toastTimer = null;
-                }, duration);
+                toastTimer = setTimeout(() => { toast.classList.remove('show'); toastTimer = null; }, duration);
             }
 
             function formatSize(bytes) {
@@ -468,117 +379,91 @@
                 if (mb < 0.01) return '< 0.01 MB';
                 return mb.toFixed(2) + ' MB';
             }
-
             function escapeHtml(str) {
                 const div = document.createElement('div');
                 div.textContent = str;
                 return div.innerHTML;
             }
-
             function getFileExtension(filename) {
                 const i = filename.lastIndexOf('.');
                 return i > 0 ? filename.slice(i + 1) : '';
             }
-
             function getBaseName(filename) {
                 const i = filename.lastIndexOf('.');
                 return i > 0 ? filename.slice(0, i) : filename;
             }
 
             // ─── Helpers ──────────────────────────────────────────────
+            function arrayBufferToBase64(buffer) {
+                const bytes = new Uint8Array(buffer);
+                let binary = '';
+                const chunkSize = 8192;
+                for (let i = 0; i < bytes.length; i += chunkSize) {
+                    const chunk = bytes.slice(i, Math.min(i + chunkSize, bytes.length));
+                    binary += String.fromCharCode.apply(null, chunk);
+                }
+                return btoa(binary);
+            }
             function base64ToArrayBuffer(base64) {
                 const binary = atob(base64);
                 const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) {
-                    bytes[i] = binary.charCodeAt(i);
-                }
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
                 return bytes.buffer;
             }
-
             async function decompressChunk(arrayBuffer) {
-                if (!window.DecompressionStream) {
-                    throw new Error('DecompressionStream not supported');
-                }
+                if (!window.DecompressionStream) return arrayBuffer; // fallback
                 try {
                     const blob = new Blob([arrayBuffer]);
                     const stream = blob.stream().pipeThrough(new DecompressionStream('gzip'));
                     const decompressedBlob = await new Response(stream).blob();
                     return await decompressedBlob.arrayBuffer();
-                } catch (e) {
-                    throw new Error('Decompression failed: ' + e.message);
-                }
+                } catch (_) { return arrayBuffer; } // fallback to raw
             }
 
-            // ─── Decryption ──────────────────────────────────────────
+            // ─── Decryption helpers ────────────────────────────────────
             const PBKDF2_ITERATIONS = 600000;
-
-            async function deriveKey(password, saltBase64) {
-                const salt = Uint8Array.from(atob(saltBase64), c => c.charCodeAt(0));
+            async function deriveKey(password, salt) {
                 const enc = new TextEncoder();
-                const keyMaterial = await crypto.subtle.importKey(
-                    'raw',
-                    enc.encode(password),
-                    'PBKDF2',
-                    false,
-                    ['deriveKey']
-                );
-                return crypto.subtle.deriveKey({
-                    name: 'PBKDF2',
-                    salt: salt,
-                    iterations: PBKDF2_ITERATIONS,
-                    hash: 'SHA-256'
-                }, keyMaterial, {
-                    name: 'AES-CBC',
-                    length: 256
-                }, false, ['encrypt', 'decrypt']);
+                const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+                return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' }, keyMaterial, { name: 'AES-CBC', length: 256 }, false, ['encrypt', 'decrypt']);
             }
-
-            async function decryptChunk(encryptedBuffer, password, saltBase64, ivBase64) {
-                const salt = Uint8Array.from(atob(saltBase64), c => c.charCodeAt(0));
+            async function decryptData(encryptedBase64, password, saltBase64, ivBase64) {
+                const encrypted = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
                 const iv = Uint8Array.from(atob(ivBase64), c => c.charCodeAt(0));
-                const key = await deriveKey(password, saltBase64);
-                const decrypted = await crypto.subtle.decrypt({ name: 'AES-CBC', iv },
-                    key,
-                    encryptedBuffer
-                );
+                const salt = Uint8Array.from(atob(saltBase64), c => c.charCodeAt(0));
+                const key = await deriveKey(password, salt);
+                const decrypted = await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, key, encrypted);
                 return decrypted;
             }
 
-            // ─── Parse DLS ─────────────────────────────────────────────
+            // ─── Parse DLS – with legacy support ──────────────────────
             async function parseDLSFile(file) {
                 const text = await file.text();
                 let container;
-                try {
-                    container = JSON.parse(text);
-                } catch (_) {
-                    throw new Error('Invalid DLS format: not valid JSON');
-                }
-                // Check required fields: version, fileName, fileType, fileSize, chunked (or chunks)
-                // We support both new chunked format and old single-data format for backward compatibility
-                if (!container.version || container.version !== '1.0') {
-                    throw new Error('Unsupported DLS version');
-                }
-                if (!container.fileName || typeof container.fileName !== 'string') {
-                    throw new Error('Missing fileName');
-                }
-                if (!container.fileType) container.fileType = 'application/octet-stream';
-                if (typeof container.fileSize !== 'number') container.fileSize = 0;
+                try { container = JSON.parse(text); } catch (_) { throw new Error('Invalid DLS format: not valid JSON'); }
+                if (!container.version || container.version !== '1.0') throw new Error('Unsupported DLS version');
 
-                // New chunked format
+                // New format (version 6+)
                 if (container.chunked === true && Array.isArray(container.chunks) && container.chunks.length > 0) {
-                    // Validate each chunk has data and if encrypted has salt/iv
+                    // Validate chunks
                     for (const chunk of container.chunks) {
                         if (!chunk.data) throw new Error('Chunk missing data');
-                        if (chunk.encrypted && (!chunk.salt || !chunk.iv)) {
-                            throw new Error('Encrypted chunk missing salt or iv');
+                        if (chunk.encrypted && (!chunk.salt || !chunk.iv)) throw new Error('Encrypted chunk missing salt/iv');
+                    }
+                    // Metadata may be encrypted or plain
+                    if (container.encryptedMeta === true) {
+                        if (!container.metaSalt || !container.metaIv || !container.metaData) {
+                            throw new Error('Encrypted metadata missing salt/iv/data');
                         }
+                    } else {
+                        if (!container.metaData) throw new Error('Metadata missing');
                     }
                     return container;
                 }
 
-                // Old single-data format (legacy)
-                if (container.data) {
-                    // Convert to chunked format
+                // Legacy format (version 1-5): has 'data', 'fileName', 'fileType', 'fileSize', optional 'encrypted', 'salt', 'iv'
+                if (container.data && container.fileName !== undefined && container.fileType !== undefined && container.fileSize !== undefined) {
+                    // Build a new format container
                     const encrypted = container.encrypted || false;
                     const salt = container.salt || '';
                     const iv = container.iv || '';
@@ -589,17 +474,66 @@
                         iv: iv,
                         data: container.data
                     }];
+                    // Metadata as plain base64
+                    const metaObj = {
+                        fileName: container.fileName,
+                        fileType: container.fileType,
+                        fileSize: container.fileSize
+                    };
+                    const metaJson = JSON.stringify(metaObj);
+                    const metaBuffer = new TextEncoder().encode(metaJson).buffer;
+                    const metaData = arrayBufferToBase64(metaBuffer);
                     return {
                         version: '1.0',
-                        fileName: container.fileName,
-                        fileType: container.fileType || 'application/octet-stream',
-                        fileSize: container.fileSize || 0,
-                        chunked: false, // we'll treat as single chunk
-                        chunks: chunks
+                        chunked: true, // treat as single chunk
+                        chunkSize: 0,
+                        chunks: chunks,
+                        encryptedMeta: false,
+                        metaSalt: '',
+                        metaIv: '',
+                        metaData: metaData
                     };
                 }
 
-                throw new Error('Invalid container: missing data or chunks');
+                throw new Error('Invalid container: unrecognized format');
+            }
+
+            // ─── Decrypt metadata ──────────────────────────────────────
+            async function decryptMetadata(container, password) {
+                let metaJson;
+                if (container.encryptedMeta === true) {
+                    const decryptedMeta = await decryptData(container.metaData, password, container.metaSalt, container.metaIv);
+                    metaJson = new TextDecoder().decode(decryptedMeta);
+                } else {
+                    const raw = base64ToArrayBuffer(container.metaData);
+                    metaJson = new TextDecoder().decode(raw);
+                }
+                return JSON.parse(metaJson);
+            }
+
+            // ─── Process chunks ────────────────────────────────────────
+            async function processChunks(container, password) {
+                const chunks = container.chunks;
+                const decryptedChunks = [];
+                for (const chunk of chunks) {
+                    let chunkBuffer = base64ToArrayBuffer(chunk.data);
+                    if (chunk.encrypted) {
+                        if (!password) throw new Error('Password required for encrypted chunk');
+                        chunkBuffer = await decryptData(chunk.data, password, chunk.salt, chunk.iv);
+                    }
+                    // Decompress (if compressed) – fallback to raw if fails
+                    const decompressed = await decompressChunk(chunkBuffer);
+                    decryptedChunks.push(decompressed);
+                }
+                // Concatenate
+                const totalLength = decryptedChunks.reduce((sum, buf) => sum + buf.byteLength, 0);
+                const combined = new Uint8Array(totalLength);
+                let offset = 0;
+                for (const buf of decryptedChunks) {
+                    combined.set(new Uint8Array(buf), offset);
+                    offset += buf.byteLength;
+                }
+                return combined.buffer;
             }
 
             // ─── Render Cards ──────────────────────────────────────────
@@ -607,8 +541,7 @@
             function renderCards() {
                 const container = cardsContainer;
                 if (dlsItems.length === 0) {
-                    container.innerHTML =
-                        `<div class="empty-state"><div class="icon">📭</div><p>No .dls files loaded yet.</p></div>`;
+                    container.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>No .dls files loaded yet.</p></div>`;
                     fileCount.textContent = '0 files';
                     cardsCount.textContent = '0';
                     statusCount.textContent = '—';
@@ -618,28 +551,26 @@
                 let html = '<div class="cards-grid">';
                 for (const item of dlsItems) {
                     const c = item.container;
-                    const isEncrypted = c.chunks.some(chunk => chunk.encrypted === true);
-                    const ext = getFileExtension(c.fileName);
-                    const baseName = getBaseName(c.fileName);
-                    const sizeStr = formatSize(c.fileSize);
+                    const isEncrypted = c.encryptedMeta === true || c.chunks.some(ch => ch.encrypted === true);
+                    const ext = item._meta ? getFileExtension(item._meta.fileName) : '?';
+                    const baseName = item._meta ? getBaseName(item._meta.fileName) : 'Unknown';
+                    const sizeStr = item._meta ? formatSize(item._meta.fileSize) : '?';
                     const statusClass = isEncrypted ? 'locked' : 'unlocked';
                     const statusLabel = isEncrypted ? '🔒 Locked' : '🔓 Unlocked';
 
                     let displayName = baseName;
-                    if (displayName.length > 20) {
-                        displayName = displayName.slice(0, 18) + '…';
-                    }
+                    if (displayName.length > 20) displayName = displayName.slice(0, 18) + '…';
 
                     html += `
                         <div class="file-card" data-id="${item.id}">
                             <div class="card-title">
                                 <span class="name-trunc" title="${escapeHtml(baseName)}">${escapeHtml(displayName)}</span>
-                                <span class="ext">.${escapeHtml(ext || 'unknown')}</span>
+                                <span class="ext">.${escapeHtml(ext)}</span>
                             </div>
                             <div class="meta-row">
                                 <span class="badge ${statusClass}">${statusLabel}</span>
                                 <span>${sizeStr}</span>
-                                <span style="opacity:0.5;">${c.fileType || 'unknown'}</span>
+                                ${item._meta ? `<span style="opacity:0.5;">${item._meta.fileType || 'unknown'}</span>` : ''}
                                 ${c.chunks.length > 1 ? `<span style="opacity:0.6;">📦 ${c.chunks.length} chunks</span>` : ''}
                             </div>
                     `;
@@ -648,6 +579,7 @@
                         html += `
                             <div class="password-group">
                                 <input type="password" class="pwd-input" placeholder="Enter password…" data-id="${item.id}" autocomplete="new-password" />
+                                <button class="toggle-pwd" data-id="${item.id}" title="Show/hide password">👁️</button>
                                 <button class="btn btn-success btn-sm decrypt-btn" data-id="${item.id}">🔓 Decrypt</button>
                             </div>
                             <div class="error-msg" data-id="${item.id}">❌ Invalid password. Please try again.</div>
@@ -676,6 +608,19 @@
 
                 // ─── Event bindings ──────────────────────────────────
 
+                // Toggle password visibility
+                container.querySelectorAll('.toggle-pwd').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const id = parseInt(btn.dataset.id, 10);
+                        const card = container.querySelector(`.file-card[data-id="${id}"]`);
+                        const inp = card.querySelector('.pwd-input');
+                        if (!inp) return;
+                        const type = inp.getAttribute('type') === 'password' ? 'text' : 'password';
+                        inp.setAttribute('type', type);
+                        btn.textContent = type === 'password' ? '👁️' : '🙈';
+                    });
+                });
+
                 // Decrypt buttons
                 container.querySelectorAll('.decrypt-btn').forEach(btn => {
                     btn.addEventListener('click', async (e) => {
@@ -700,46 +645,30 @@
                         statusLabel.textContent = '⏳ Decrypting…';
 
                         try {
-                            // Process each chunk
-                            const chunks = item.container.chunks;
-                            const decryptedChunks = [];
-
-                            for (const chunk of chunks) {
-                                let chunkBuffer = base64ToArrayBuffer(chunk.data);
-                                if (chunk.encrypted) {
-                                    chunkBuffer = await decryptChunk(chunkBuffer, password, chunk.salt, chunk.iv);
-                                }
-                                // Decompress the chunk
-                                const decompressed = await decompressChunk(chunkBuffer);
-                                decryptedChunks.push(decompressed);
+                            // 1. Decrypt metadata
+                            let meta;
+                            try {
+                                meta = await decryptMetadata(item.container, password);
+                            } catch (err) {
+                                throw new Error('Metadata decryption failed: ' + err.message);
                             }
+                            item._meta = meta;
 
-                            // Concatenate all chunks
-                            const totalLength = decryptedChunks.reduce((sum, buf) => sum + buf.byteLength, 0);
-                            const combined = new Uint8Array(totalLength);
-                            let offset = 0;
-                            for (const buf of decryptedChunks) {
-                                combined.set(new Uint8Array(buf), offset);
-                                offset += buf.byteLength;
-                            }
+                            // 2. Decrypt chunks
+                            const fileBuffer = await processChunks(item.container, password);
 
-                            // Restore file
-                            const blob = new Blob([combined.buffer], {
-                                type: item.container.fileType || 'application/octet-stream'
-                            });
+                            // 3. Restore file
+                            const blob = new Blob([fileBuffer], { type: meta.fileType || 'application/octet-stream' });
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
-                            a.download = item.container.fileName;
+                            a.download = meta.fileName;
                             a.href = url;
                             document.body.appendChild(a);
                             a.click();
-                            setTimeout(() => {
-                                document.body.removeChild(a);
-                                URL.revokeObjectURL(url);
-                            }, 5000);
+                            setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 5000);
 
                             statusLabel.textContent = '✅ Decrypted & downloaded!';
-                            showToast(`✅ Restored: ${item.container.fileName}`, 'success', 2500);
+                            showToast(`✅ Restored: ${meta.fileName}`, 'success', 2500);
                             const badge = card.querySelector('.badge');
                             if (badge) {
                                 badge.textContent = '🔓 Unlocked';
@@ -775,44 +704,30 @@
                         statusLabel.textContent = '⏳ Extracting…';
 
                         try {
-                            const chunks = item.container.chunks;
-                            const decryptedChunks = [];
-
-                            for (const chunk of chunks) {
-                                let chunkBuffer = base64ToArrayBuffer(chunk.data);
-                                // Should not be encrypted, but if it is, we can't extract without password
-                                if (chunk.encrypted) {
-                                    throw new Error('Cannot extract encrypted chunk without password');
+                            // Metadata should already be decrypted (or unencrypted)
+                            let meta = item._meta;
+                            if (!meta) {
+                                // Try to decrypt with empty password (unencrypted metadata)
+                                try {
+                                    meta = await decryptMetadata(item.container, '');
+                                } catch (_) {
+                                    throw new Error('Metadata not available');
                                 }
-                                const decompressed = await decompressChunk(chunkBuffer);
-                                decryptedChunks.push(decompressed);
+                                item._meta = meta;
                             }
-
-                            const totalLength = decryptedChunks.reduce((sum, buf) => sum + buf.byteLength, 0);
-                            const combined = new Uint8Array(totalLength);
-                            let offset = 0;
-                            for (const buf of decryptedChunks) {
-                                combined.set(new Uint8Array(buf), offset);
-                                offset += buf.byteLength;
-                            }
-
-                            const blob = new Blob([combined.buffer], {
-                                type: item.container.fileType || 'application/octet-stream'
-                            });
+                            const fileBuffer = await processChunks(item.container, '');
+                            const blob = new Blob([fileBuffer], { type: meta.fileType || 'application/octet-stream' });
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
-                            a.download = item.container.fileName;
+                            a.download = meta.fileName;
                             a.href = url;
                             document.body.appendChild(a);
                             a.click();
-                            setTimeout(() => {
-                                document.body.removeChild(a);
-                                URL.revokeObjectURL(url);
-                            }, 5000);
+                            setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 5000);
                             statusLabel.textContent = '✅ Extracted!';
                             btn.innerHTML = '✅ Done';
                             btn.disabled = true;
-                            showToast(`✅ Extracted: ${item.container.fileName}`, 'success', 2500);
+                            showToast(`✅ Extracted: ${meta.fileName}`, 'success', 2500);
                         } catch (err) {
                             console.error('Extraction error', err);
                             statusLabel.textContent = '❌ Extraction failed';
@@ -823,6 +738,7 @@
                     });
                 });
 
+                // Enter key on password fields
                 container.querySelectorAll('.pwd-input').forEach(inp => {
                     inp.addEventListener('keydown', (e) => {
                         if (e.key === 'Enter') {
@@ -837,29 +753,32 @@
             // ─── Load DLS files ────────────────────────────────────────
 
             fileInput.addEventListener('change', async (e) => {
-                const files = Array.from(e.target.files).filter(f =>
-                    f.name.toLowerCase().endsWith('.dls')
-                );
+                const files = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.dls'));
                 if (files.length === 0) {
                     showToast('Please select .dls files only.', 'error', 2000);
                     fileInput.value = '';
                     return;
                 }
 
-                // Clear previous items
                 dlsItems = [];
                 idCounter = 0;
-
-                let loaded = 0;
-                let errors = 0;
+                let loaded = 0, errors = 0;
 
                 for (const file of files) {
                     try {
                         const container = await parseDLSFile(file);
+                        // Try to read metadata if unencrypted (so we can show filename)
+                        let meta = null;
+                        if (!container.encryptedMeta) {
+                            try {
+                                meta = await decryptMetadata(container, '');
+                            } catch (_) { /* ignore */ }
+                        }
                         dlsItems.push({
                             id: ++idCounter,
                             file: file,
                             container: container,
+                            _meta: meta,
                             status: 'loaded',
                             error: null,
                             password: ''
@@ -872,38 +791,23 @@
                     }
                 }
 
-                if (loaded > 0) {
-                    showToast(`✅ Loaded ${loaded} DLS file(s)`, 'success', 2000);
-                }
-                if (errors > 0) {
-                    showToast(`⚠️ ${errors} file(s) failed to load`, 'error', 3000);
-                }
+                if (loaded > 0) showToast(`✅ Loaded ${loaded} DLS file(s)`, 'success', 2000);
+                if (errors > 0) showToast(`⚠️ ${errors} file(s) failed to load`, 'error', 3000);
                 renderCards();
                 fileInput.value = '';
             });
 
             const inputWrap = document.querySelector('.file-input-wrap');
-            ['dragover', 'dragenter'].forEach(evt => {
-                inputWrap.addEventListener(evt, (e) => {
-                    e.preventDefault();
-                    inputWrap.querySelector('input').classList.add('drag-over');
-                });
+            ['dragover','dragenter'].forEach(evt => {
+                inputWrap.addEventListener(evt, (e) => { e.preventDefault(); inputWrap.querySelector('input').classList.add('drag-over'); });
             });
-            ['dragleave', 'drop'].forEach(evt => {
-                inputWrap.addEventListener(evt, (e) => {
-                    e.preventDefault();
-                    inputWrap.querySelector('input').classList.remove('drag-over');
-                });
+            ['dragleave','drop'].forEach(evt => {
+                inputWrap.addEventListener(evt, (e) => { e.preventDefault(); inputWrap.querySelector('input').classList.remove('drag-over'); });
             });
             inputWrap.addEventListener('drop', (e) => {
                 e.preventDefault();
-                const files = Array.from(e.dataTransfer.files).filter(f =>
-                    f.name.toLowerCase().endsWith('.dls')
-                );
-                if (files.length === 0) {
-                    showToast('Please drop .dls files only.', 'error', 2000);
-                    return;
-                }
+                const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.dls'));
+                if (files.length === 0) { showToast('Please drop .dls files only.', 'error', 2000); return; }
                 const dt = new DataTransfer();
                 files.forEach(f => dt.items.add(f));
                 fileInput.files = dt.files;
@@ -912,7 +816,7 @@
 
             renderCards();
 
-            console.log('🔓 DLS Decoder v5 ready (chunked, per‑file passwords)');
+            console.log('🔓 DLS Decoder v7 ready (backward compatible with legacy containers)');
         })();
     </script>
 </body>
