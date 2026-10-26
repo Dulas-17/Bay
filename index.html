@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DLS Decoder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DLS Decoder v3</title>
+<!-- DLS Decoder v3 -->
 <style>
 :root{--bg:#0b0e14;--panel:#121722;--panel2:#181f2d;--line:#242d3f;--text:#e9eef7;--mute:#8a96ab;--a:#7c9cff;--b:#b18cff;--ok:#42d392;--bad:#ff6b7a;--warn:#f0a24b;--r:16px;--font:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -45,18 +46,35 @@ h1{font-size:1.9rem;letter-spacing:-.02em;font-weight:700}
 .save{display:block;margin-top:8px;padding:11px 14px;border:1px solid var(--a);border-radius:12px;color:var(--a);text-decoration:none;font-weight:600;font-size:.9rem;word-break:break-all}
 .hide{display:none!important}
 footer{color:var(--mute);font-size:.75rem;text-align:center;margin-top:24px}
+
+/* v3 fluid layout */
+html{scroll-behavior:smooth;scroll-padding:12px 0 96px;-webkit-text-size-adjust:100%}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+body{min-height:100dvh;padding:clamp(14px,4vw,28px) max(clamp(12px,4vw,16px),env(safe-area-inset-right)) calc(56px + env(safe-area-inset-bottom)) max(clamp(12px,4vw,16px),env(safe-area-inset-left))}
+h1{font-size:clamp(1.5rem,6vw,1.9rem);display:flex;align-items:center;gap:10px}
+.ver{font-size:.7rem;font-weight:600;color:var(--mute);border:1px solid var(--line);border-radius:20px;padding:2px 9px;letter-spacing:0}
+.sub{margin:4px 0 18px;font-size:.9rem}
+.card{padding:14px;margin-bottom:12px}
+.drop{padding:22px 12px}.drop b{font-size:1rem}
+input,button{font-family:inherit}
+.pw input,.pwrow input{font-size:16px}
+.mini{min-height:40px}
+footer{margin-top:16px}
+.btn{min-height:44px}.btn.sm{min-height:36px}
+.pwrow input{min-height:44px}.f{padding:9px 10px}
+.kfrow .kname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>DLS Decoder</h1>
-  <p class="sub">Open .dls archives, unlock them and restore your files. Reads DLS v2 archives (with or without a key file) and older .dls files.</p>
+  <h1>DLS Decoder <span class="ver">v3</span></h1>
+  <p class="sub">Open and restore .dls archives</p>
   <div class="card">
-    <div class="drop" id="drop"><b>Drop .dls files here or tap to choose</b><span>Archives with several files are supported.</span></div>
+    <div class="drop" id="drop"><b>Add .dls files</b><span>Tap or drop here</span></div>
     <input type="file" id="inp" multiple hidden>
   </div>
   <div id="list"></div>
-  <footer>DLS Decoder · v2 (AES-256-GCM, streamed, optional key file) + legacy v1 (AES-256-CBC, JSON)</footer>
+  <footer>DLS Decoder v3</footer>
 </div>
 
 <script>
@@ -66,6 +84,7 @@ const $ = id => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
 const fmt = b => b >= 1073741824 ? (b/1073741824).toFixed(2)+' GB' : (b/1048576).toFixed(b<1048576?3:1)+' MB';
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const reveal = el => { try { el.scrollIntoView({block:'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'}); } catch {} };
 
 /* ---------- Crypto / compression ---------- */
 async function pbkdf(pw, salt, iter, alg, usage, kf) {
@@ -123,13 +142,13 @@ async function unlock(a, pw, kf) {
     while (off < a.file.size && !ended) {
       const h = new DataView(await a.file.slice(off, off + 5).arrayBuffer());
       const type = h.getUint8(0), len = h.getUint32(1), start = off + 5; off = start + len;
-      if (off > a.file.size) throw new Error('This archive is incomplete (the file was cut off).');
+      if (off > a.file.size) throw new Error('Archive is incomplete.');
       if (type === 1) { cur = JSON.parse(dec.decode(await openRec(a, start, len, seq))); cur.chunks = []; files.push(cur); }
       else if (type === 2 && cur) cur.chunks.push({start, len, seq});
       else if (type === 255) ended = true;
       seq++;
     }
-    if (!ended) throw new Error('This archive is incomplete (the file was cut off).');
+    if (!ended) throw new Error('Archive is incomplete.');
     files.forEach(f => f.gen = async function*() {
       for (const ch of f.chunks) {
         const p = await openRec(a, ch.start, ch.len, ch.seq);
@@ -189,10 +208,10 @@ async function extract(a, list, ui) {
       if (viaLinks) await new Promise(r => setTimeout(r, 300));
     }
     ui.prog('Done', 100);
-    ui.msg((list.length === 1 ? 'Restored ' + safe(list[0].name) + '.' : 'Restored ' + list.length + ' files.') + (viaLinks ? ' If a download did not start, tap the Save link below.' : ''), 'ok');
+    ui.msg((list.length === 1 ? 'Restored ' + safe(list[0].name) + '.' : 'Restored ' + list.length + ' files.') + (viaLinks ? ' Tap Save below if nothing downloaded.' : ''), 'ok');
   } catch (e) {
     console.error(e);
-    ui.msg(e.name === 'OperationError' ? (a.kind === 'v2' ? 'A piece of this archive failed its integrity check. The file is damaged, incomplete or was changed.' : 'Wrong password or damaged data.') : 'Failed: ' + (e.message || e), 'bad');
+    ui.msg(e.name === 'OperationError' ? (a.kind === 'v2' ? 'Part of this archive is damaged or was changed.' : 'Wrong password or damaged data.') : 'Failed: ' + (e.message || e), 'bad');
   } finally { ui.busy(false); }
 }
 
@@ -200,25 +219,25 @@ async function extract(a, list, ui) {
 function addCard(a) {
   const el = document.createElement('div'); el.className = 'card';
   el.innerHTML = `<div class="ah"><div class="an"></div><span class="badge"></span></div><div class="hint info"></div>
-  <div class="kfrow hide"><button class="mini kbtn" type="button">Choose key file</button><span class="hint kname" style="margin:0">No key file chosen</span></div><input type="file" class="kin" hidden>
-  <div class="pwrow"><input type="password" placeholder="Password (if you set one)" autocomplete="new-password"><button class="btn unl">Unlock</button></div>
+  <div class="kfrow hide"><button class="mini kbtn" type="button">Key file</button><span class="hint kname" style="margin:0">None chosen</span></div><input type="file" class="kin" hidden>
+  <div class="pwrow"><input type="password" placeholder="Password" autocomplete="new-password"><button class="btn unl">Unlock</button></div>
   <div class="files"></div>
   <div class="actions hide"><span class="hint cnt"></span><button class="btn all">Extract all</button></div>
   <div class="prog"><div class="top"><span class="pl"></span><span class="pp"></span></div><div class="bg"><i></i></div></div><div class="msg"></div><div class="saves"></div>`;
   const q = s => el.querySelector(s);
   q('.an').textContent = a.file.name;
-  q('.info').textContent = fmt(a.file.size) + (a.kind === 'legacy' ? ' · older format' : '') + (a.kf ? ' · needs a key file' : '');
+  q('.info').textContent = fmt(a.file.size) + (a.kind === 'legacy' ? ' · legacy' : '') + (a.kf ? ' · key file' : '');
   const badge = q('.badge'), pw = q('input[type=password]');
   let kfBytes = null;
-  const msg = (t, k) => { const m = q('.msg'); m.textContent = t; m.className = 'msg ' + k; };
+  const msg = (t, k) => { const m = q('.msg'); m.textContent = t; m.className = 'msg ' + k; reveal(m); };
   const ui = {
     msg,
-    prog: (l, p) => { q('.prog').style.display = 'block'; q('.pl').textContent = l; q('.pp').textContent = Math.round(p) + '%'; q('.bg i').style.width = p + '%'; },
+    prog: (l, p) => { if (q('.prog').style.display !== 'block') { q('.prog').style.display = 'block'; reveal(q('.prog')); } q('.pl').textContent = l; q('.pp').textContent = Math.round(p) + '%'; q('.bg i').style.width = p + '%'; },
     busy: b => { if (b) q('.msg').className = 'msg'; el.querySelectorAll('button').forEach(x => x.disabled = b); },
     mark: () => showFiles(),
     save: (name, url, size) => {
       const l = document.createElement('a'); l.href = url; l.download = name; l.className = 'save';
-      l.textContent = '⬇ Save: ' + name + ' (' + fmt(size) + ')'; q('.saves').appendChild(l); return l;
+      l.textContent = '⬇ Save: ' + name + ' (' + fmt(size) + ')'; q('.saves').appendChild(l); reveal(l); return l;
     }
   };
   function showFiles() {
@@ -235,16 +254,16 @@ function addCard(a) {
     });
   }
   async function doUnlock() {
-    if (a.kf && !kfBytes) { msg('Choose the key file first.', 'bad'); return; }
-    if (a.enc && !a.kf && !pw.value) { msg('Enter the password first.', 'bad'); return; }
-    if (a.enc && !window.crypto?.subtle) { msg('Decryption needs HTTPS or localhost.', 'bad'); return; }
+    if (a.kf && !kfBytes) { msg('Pick the key file.', 'bad'); return; }
+    if (a.enc && !a.kf && !pw.value) { msg('Enter the password.', 'bad'); return; }
+    if (a.enc && !window.crypto?.subtle) { msg('Needs a secure (https) page.', 'bad'); return; }
     ui.busy(true);
-    const ub = q('.unl'); ub.textContent = 'Unlocking…'; msg('Unlocking… this takes a few seconds.', 'ok');
+    const ub = q('.unl'); ub.textContent = 'Unlocking…'; msg('Unlocking…', 'ok');
     await new Promise(r => setTimeout(r, 50));
     try { await unlock(a, pw.value, kfBytes); q('.msg').className = 'msg'; showFiles(); }
     catch (e) {
       console.error(e);
-      msg(a.enc && !/incomplete/.test(e.message) ? (a.kf ? 'Wrong password, wrong key file, or damaged file. Check that the Key ID matches the one the encoder showed.' : 'Wrong password or damaged file.') : e.message, 'bad');
+      msg(a.enc && !/incomplete/.test(e.message) ? (a.kf ? 'Wrong password, key file, or damaged file.' : 'Wrong password or damaged file.') : e.message, 'bad');
     }
     finally { ub.textContent = 'Unlock'; ui.busy(false); if (a.files) showFiles(); }
   }
@@ -258,7 +277,7 @@ function addCard(a) {
   q('.unl').onclick = doUnlock;
   pw.onkeydown = e => { if (e.key === 'Enter') doUnlock(); };
   q('.all').onclick = () => extract(a, a.files, ui);
-  $('list').appendChild(el);
+  $('list').appendChild(el); reveal(el);
 }
 
 async function load(files) {
@@ -277,6 +296,15 @@ $('inp').onchange = e => { load(Array.from(e.target.files)); e.target.value = ''
 ['dragenter','dragover'].forEach(t => $('drop').addEventListener(t, e => { e.preventDefault(); $('drop').classList.add('over'); }));
 ['dragleave','drop'].forEach(t => $('drop').addEventListener(t, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
 $('drop').addEventListener('drop', e => load(Array.from(e.dataTransfer.files)));
+
+/* ---------- Scroll memory ---------- */
+try {
+  const KEY = 'dls_dec_scroll', saved = parseInt(localStorage.getItem(KEY), 10);
+  if (saved > 0) { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; requestAnimationFrame(() => scrollTo(0, saved)); }
+  let t = 0;
+  addEventListener('scroll', () => { if (t) return; t = requestAnimationFrame(() => { t = 0; try { localStorage.setItem(KEY, String(Math.round(scrollY))); } catch {} }); }, {passive:true});
+} catch {}
+console.log('DLS Decoder v3');
 })();
 </script>
 </body>
