@@ -20,6 +20,8 @@ h1{font-size:1.9rem;letter-spacing:-.02em;font-weight:700}
 .badge{font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:20px;border:1px solid var(--line);white-space:nowrap}
 .badge.lock{color:var(--warn);border-color:var(--warn)}.badge.open{color:var(--ok);border-color:var(--ok)}
 .hint{color:var(--mute);font-size:.8rem;margin-top:4px}
+.kfrow{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.mini{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:9px;padding:8px 12px;font-size:.82rem;font-weight:600;cursor:pointer}.mini:hover{border-color:var(--a)}
 .pwrow{display:flex;gap:8px;margin-top:14px}
 .pwrow input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:11px 14px;color:var(--text);font-size:.95rem}
 .pwrow input:focus{outline:2px solid var(--a);border-color:transparent}
@@ -40,23 +42,21 @@ h1{font-size:1.9rem;letter-spacing:-.02em;font-weight:700}
 .prog .bg i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--a),var(--b));transition:width .15s}
 .msg{margin-top:12px;font-size:.88rem;display:none;padding:10px 12px;border-radius:10px}
 .msg.ok{display:block;background:#12281f;color:var(--ok)}.msg.bad{display:block;background:#2b141a;color:var(--bad)}
+.save{display:block;margin-top:8px;padding:11px 14px;border:1px solid var(--a);border-radius:12px;color:var(--a);text-decoration:none;font-weight:600;font-size:.9rem;word-break:break-all}
 .hide{display:none!important}
 footer{color:var(--mute);font-size:.75rem;text-align:center;margin-top:24px}
-.mini{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:9px;padding:8px 12px;font-size:.82rem;font-weight:600;cursor:pointer}
-.mini:hover{border-color:var(--a)}
-.kfrow{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>DLS Decoder</h1>
-  <p class="sub">Open .dls archives, unlock them and restore your files. Reads new DLS v2 archives and older .dls files.</p>
+  <p class="sub">Open .dls archives, unlock them and restore your files. Reads DLS v2 archives (with or without a key file) and older .dls files.</p>
   <div class="card">
     <div class="drop" id="drop"><b>Drop .dls files here or tap to choose</b><span>Archives with several files are supported.</span></div>
     <input type="file" id="inp" multiple hidden>
   </div>
   <div id="list"></div>
-  <footer>DLS Decoder · v2 (AES-256-GCM, streamed) + legacy v1 (AES-256-CBC, JSON)</footer>
+  <footer>DLS Decoder · v2 (AES-256-GCM, streamed, optional key file) + legacy v1 (AES-256-CBC, JSON)</footer>
 </div>
 
 <script>
@@ -81,6 +81,11 @@ async function cbcDec(dataB64, pw, saltB64, ivB64) { // legacy v1
   const key = await pbkdf(pw, b64(saltB64), 600000, 'AES-CBC', 'decrypt');
   return new Uint8Array(await crypto.subtle.decrypt({name:'AES-CBC', iv:b64(ivB64)}, key, b64(dataB64)));
 }
+async function kfId(b) {
+  if (!window.crypto?.subtle) return '?';
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', b));
+  return Array.from(h.slice(0, 4), x => x.toString(16).padStart(2, '0')).join('');
+}
 async function gunzip(u8) {
   return new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
 }
@@ -89,8 +94,7 @@ async function gunzip(u8) {
 async function openArchive(file) {
   const head = new Uint8Array(await file.slice(0, 26).arrayBuffer());
   if (dec.decode(head.subarray(0, 4)) === 'DLS2') {
-    const v = new DataView(head.buffer);
-    const fl = v.getUint8(5);
+    const v = new DataView(head.buffer), fl = v.getUint8(5);
     return {file, kind:'v2', enc:(fl & 3) !== 0, kf:(fl & 2) !== 0, iter:v.getUint32(6), salt:head.slice(10, 26), files:null};
   }
   let c; // legacy JSON container
@@ -148,14 +152,13 @@ async function unlock(a, pw, kf) {
 
 /* ---------- Writing files ---------- */
 const safe = n => (n || 'file').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_');
-function blobWriter(name, type) {
+function blobWriter(name, type, save) {
   let parts = [], n = 0;
   return {
     write: async u => { parts.push(u); if (++n % 8 === 0) parts = [new Blob(parts)]; },
-    close: async () => {
-      const url = URL.createObjectURL(new Blob(parts, {type:type || 'application/octet-stream'}));
-      const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click();
-      setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 30000);
+    close: async () => { // also leaves a visible Save link, in case the browser blocks automatic downloads
+      const blob = new Blob(parts, {type:type || 'application/octet-stream'});
+      save(name, URL.createObjectURL(blob), blob.size).click();
     },
     abort: async () => { parts = []; }
   };
@@ -163,13 +166,12 @@ function blobWriter(name, type) {
 const fsWriter = async h => { const w = await h.createWritable(); return {write:u => w.write(u), close:() => w.close(), abort:() => w.abort().catch(() => {})}; };
 
 async function extract(a, list, ui) {
-  // Pickers must open straight from the tap, before any slow work.
-  let dir = null, single = null;
+  let dir = null, single = null; // pickers must open straight from the tap
   try {
     if (list.length > 1 && window.showDirectoryPicker) dir = await window.showDirectoryPicker({mode:'readwrite'});
     else if (list.length === 1 && window.showSaveFilePicker) single = await window.showSaveFilePicker({suggestedName:safe(list[0].name)});
   } catch (e) { if (e.name === 'AbortError') return; throw e; }
-  const total = list.reduce((s, f) => s + (f.size || 0), 0) || 1, used = new Set(); let done = 0;
+  const total = list.reduce((s, f) => s + (f.size || 0), 0) || 1, used = new Set(); let done = 0, viaLinks = false;
   ui.busy(true);
   try {
     for (const f of list) {
@@ -179,39 +181,45 @@ async function extract(a, list, ui) {
       let w;
       if (single) w = await fsWriter(single);
       else if (dir) w = await fsWriter(await dir.getFileHandle(name, {create:true}));
-      else w = blobWriter(name, f.type);
+      else { w = blobWriter(name, f.type, ui.save); viaLinks = true; }
       try {
         for await (const u8 of f.gen()) { await w.write(u8); done += u8.length; ui.prog(name, done / total * 100); }
         await w.close(); f._done = true; ui.mark();
       } catch (e) { await w.abort(); throw e; }
-      if (!single && !dir) await new Promise(r => setTimeout(r, 300));
+      if (viaLinks) await new Promise(r => setTimeout(r, 300));
     }
     ui.prog('Done', 100);
-    ui.msg(list.length === 1 ? `Restored ${safe(list[0].name)}.` : `Restored ${list.length} files.`, 'ok');
+    ui.msg((list.length === 1 ? 'Restored ' + safe(list[0].name) + '.' : 'Restored ' + list.length + ' files.') + (viaLinks ? ' If a download did not start, tap the Save link below.' : ''), 'ok');
   } catch (e) {
     console.error(e);
-    ui.msg(e.name === 'OperationError' ? 'Wrong password or damaged data.' : 'Failed: ' + (e.message || e), 'bad');
+    ui.msg(e.name === 'OperationError' ? (a.kind === 'v2' ? 'A piece of this archive failed its integrity check. The file is damaged, incomplete or was changed.' : 'Wrong password or damaged data.') : 'Failed: ' + (e.message || e), 'bad');
   } finally { ui.busy(false); }
 }
 
 /* ---------- UI ---------- */
 function addCard(a) {
   const el = document.createElement('div'); el.className = 'card';
-  el.innerHTML = `<div class="ah"><div class="an"></div><span class="badge"></span></div><div class="hint"></div>
+  el.innerHTML = `<div class="ah"><div class="an"></div><span class="badge"></span></div><div class="hint info"></div>
   <div class="kfrow hide"><button class="mini kbtn" type="button">Choose key file</button><span class="hint kname" style="margin:0">No key file chosen</span></div><input type="file" class="kin" hidden>
   <div class="pwrow"><input type="password" placeholder="Password (if you set one)" autocomplete="new-password"><button class="btn unl">Unlock</button></div>
   <div class="files"></div>
   <div class="actions hide"><span class="hint cnt"></span><button class="btn all">Extract all</button></div>
-  <div class="prog"><div class="top"><span class="pl"></span><span class="pp"></span></div><div class="bg"><i></i></div></div><div class="msg"></div>`;
+  <div class="prog"><div class="top"><span class="pl"></span><span class="pp"></span></div><div class="bg"><i></i></div></div><div class="msg"></div><div class="saves"></div>`;
   const q = s => el.querySelector(s);
-  q('.an').textContent = a.file.name; q('.hint').textContent = fmt(a.file.size) + (a.kind === 'legacy' ? ' · older format' : '') + (a.kf ? ' · needs key file' : '');
-  const badge = q('.badge'), pw = q('input');
+  q('.an').textContent = a.file.name;
+  q('.info').textContent = fmt(a.file.size) + (a.kind === 'legacy' ? ' · older format' : '') + (a.kf ? ' · needs a key file' : '');
+  const badge = q('.badge'), pw = q('input[type=password]');
+  let kfBytes = null;
   const msg = (t, k) => { const m = q('.msg'); m.textContent = t; m.className = 'msg ' + k; };
   const ui = {
     msg,
     prog: (l, p) => { q('.prog').style.display = 'block'; q('.pl').textContent = l; q('.pp').textContent = Math.round(p) + '%'; q('.bg i').style.width = p + '%'; },
-    busy: b => { q('.msg').className = 'msg'; el.querySelectorAll('button').forEach(x => x.disabled = b); },
-    mark: () => showFiles()
+    busy: b => { if (b) q('.msg').className = 'msg'; el.querySelectorAll('button').forEach(x => x.disabled = b); },
+    mark: () => showFiles(),
+    save: (name, url, size) => {
+      const l = document.createElement('a'); l.href = url; l.download = name; l.className = 'save';
+      l.textContent = '⬇ Save: ' + name + ' (' + fmt(size) + ')'; q('.saves').appendChild(l); return l;
+    }
   };
   function showFiles() {
     badge.textContent = 'Unlocked'; badge.className = 'badge open';
@@ -229,18 +237,22 @@ function addCard(a) {
   async function doUnlock() {
     if (a.kf && !kfBytes) { msg('Choose the key file first.', 'bad'); return; }
     if (a.enc && !a.kf && !pw.value) { msg('Enter the password first.', 'bad'); return; }
-    if (!window.crypto?.subtle && a.enc) { msg('Decryption needs HTTPS or localhost.', 'bad'); return; }
+    if (a.enc && !window.crypto?.subtle) { msg('Decryption needs HTTPS or localhost.', 'bad'); return; }
     ui.busy(true);
-    try { await unlock(a, pw.value, kfBytes); showFiles(); }
-    catch (e) { console.error(e); msg(a.enc && !/incomplete/.test(e.message) ? (a.kf ? 'Wrong password, wrong key file, or damaged file.' : 'Wrong password or damaged file.') : e.message, 'bad'); }
-    finally { ui.busy(false); if (a.files) showFiles(); }
+    const ub = q('.unl'); ub.textContent = 'Unlocking…'; msg('Unlocking… this takes a few seconds.', 'ok');
+    await new Promise(r => setTimeout(r, 50));
+    try { await unlock(a, pw.value, kfBytes); q('.msg').className = 'msg'; showFiles(); }
+    catch (e) {
+      console.error(e);
+      msg(a.enc && !/incomplete/.test(e.message) ? (a.kf ? 'Wrong password, wrong key file, or damaged file. Check that the Key ID matches the one the encoder showed.' : 'Wrong password or damaged file.') : e.message, 'bad');
+    }
+    finally { ub.textContent = 'Unlock'; ui.busy(false); if (a.files) showFiles(); }
   }
-  let kfBytes = null;
   if (a.kf) q('.kfrow').classList.remove('hide');
   q('.kbtn').onclick = () => q('.kin').click();
   q('.kin').onchange = async e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-    kfBytes = new Uint8Array(await f.arrayBuffer()); q('.kname').textContent = f.name;
+    kfBytes = new Uint8Array(await f.arrayBuffer()); q('.kname').textContent = f.name + ' · Key ID ' + await kfId(kfBytes);
   };
   if (a.enc) { badge.textContent = 'Locked'; badge.className = 'badge lock'; } else { q('.pwrow').classList.add('hide'); doUnlock(); }
   q('.unl').onclick = doUnlock;
