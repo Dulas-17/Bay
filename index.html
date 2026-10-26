@@ -42,6 +42,9 @@ h1{font-size:1.9rem;letter-spacing:-.02em;font-weight:700}
 .msg.ok{display:block;background:#12281f;color:var(--ok)}.msg.bad{display:block;background:#2b141a;color:var(--bad)}
 .hide{display:none!important}
 footer{color:var(--mute);font-size:.75rem;text-align:center;margin-top:24px}
+.mini{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:9px;padding:8px 12px;font-size:.82rem;font-weight:600;cursor:pointer}
+.mini:hover{border-color:var(--a)}
+.kfrow{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -65,8 +68,13 @@ const fmt = b => b >= 1073741824 ? (b/1073741824).toFixed(2)+' GB' : (b/1048576)
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
 /* ---------- Crypto / compression ---------- */
-async function pbkdf(pw, salt, iter, alg, usage) {
-  const km = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']);
+async function pbkdf(pw, salt, iter, alg, usage, kf) {
+  let m = enc.encode(pw);
+  if (kf) { // password + 0x00 + SHA-256(key file)
+    const h = new Uint8Array(await crypto.subtle.digest('SHA-256', kf)), x = new Uint8Array(m.length + 33);
+    x.set(m); x.set(h, m.length + 1); m = x;
+  }
+  const km = await crypto.subtle.importKey('raw', m, 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:iter, hash:'SHA-256'}, km, {name:alg, length:256}, false, [usage]);
 }
 async function cbcDec(dataB64, pw, saltB64, ivB64) { // legacy v1
@@ -82,7 +90,8 @@ async function openArchive(file) {
   const head = new Uint8Array(await file.slice(0, 26).arrayBuffer());
   if (dec.decode(head.subarray(0, 4)) === 'DLS2') {
     const v = new DataView(head.buffer);
-    return {file, kind:'v2', enc:v.getUint8(5) === 1, iter:v.getUint32(6), salt:head.slice(10, 26), files:null};
+    const fl = v.getUint8(5);
+    return {file, kind:'v2', enc:(fl & 3) !== 0, kf:(fl & 2) !== 0, iter:v.getUint32(6), salt:head.slice(10, 26), files:null};
   }
   let c; // legacy JSON container
   try { c = JSON.parse(await file.text()); } catch { throw new Error('Not a valid DLS file.'); }
@@ -103,9 +112,9 @@ async function openRec(a, start, len, seq) {
   return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM', iv:p.slice(0, 12), additionalData:aad}, a.key, p.subarray(12)));
 }
 
-async function unlock(a, pw) {
+async function unlock(a, pw, kf) {
   if (a.kind === 'v2') {
-    if (a.enc) a.key = await pbkdf(pw, a.salt, a.iter, 'AES-GCM', 'decrypt');
+    if (a.enc) a.key = await pbkdf(pw, a.salt, a.iter, 'AES-GCM', 'decrypt', a.kf ? kf : null);
     const files = []; let off = 26, seq = 0, cur = null, ended = false;
     while (off < a.file.size && !ended) {
       const h = new DataView(await a.file.slice(off, off + 5).arrayBuffer());
@@ -189,12 +198,13 @@ async function extract(a, list, ui) {
 function addCard(a) {
   const el = document.createElement('div'); el.className = 'card';
   el.innerHTML = `<div class="ah"><div class="an"></div><span class="badge"></span></div><div class="hint"></div>
-  <div class="pwrow"><input type="password" placeholder="Password" autocomplete="new-password"><button class="btn unl">Unlock</button></div>
+  <div class="kfrow hide"><button class="mini kbtn" type="button">Choose key file</button><span class="hint kname" style="margin:0">No key file chosen</span></div><input type="file" class="kin" hidden>
+  <div class="pwrow"><input type="password" placeholder="Password (if you set one)" autocomplete="new-password"><button class="btn unl">Unlock</button></div>
   <div class="files"></div>
   <div class="actions hide"><span class="hint cnt"></span><button class="btn all">Extract all</button></div>
   <div class="prog"><div class="top"><span class="pl"></span><span class="pp"></span></div><div class="bg"><i></i></div></div><div class="msg"></div>`;
   const q = s => el.querySelector(s);
-  q('.an').textContent = a.file.name; q('.hint').textContent = fmt(a.file.size) + (a.kind === 'legacy' ? ' · older format' : '');
+  q('.an').textContent = a.file.name; q('.hint').textContent = fmt(a.file.size) + (a.kind === 'legacy' ? ' · older format' : '') + (a.kf ? ' · needs key file' : '');
   const badge = q('.badge'), pw = q('input');
   const msg = (t, k) => { const m = q('.msg'); m.textContent = t; m.className = 'msg ' + k; };
   const ui = {
@@ -205,7 +215,7 @@ function addCard(a) {
   };
   function showFiles() {
     badge.textContent = 'Unlocked'; badge.className = 'badge open';
-    q('.pwrow').classList.add('hide'); q('.actions').classList.toggle('hide', a.files.length < 2);
+    q('.pwrow').classList.add('hide'); q('.kfrow').classList.add('hide'); q('.actions').classList.toggle('hide', a.files.length < 2);
     q('.cnt').textContent = a.files.length + ' files · ' + fmt(a.files.reduce((s, f) => s + (f.size || 0), 0));
     const box = q('.files'); box.innerHTML = '';
     a.files.forEach(f => {
@@ -217,13 +227,21 @@ function addCard(a) {
     });
   }
   async function doUnlock() {
-    if (a.enc && !pw.value) { msg('Enter the password first.', 'bad'); return; }
+    if (a.kf && !kfBytes) { msg('Choose the key file first.', 'bad'); return; }
+    if (a.enc && !a.kf && !pw.value) { msg('Enter the password first.', 'bad'); return; }
     if (!window.crypto?.subtle && a.enc) { msg('Decryption needs HTTPS or localhost.', 'bad'); return; }
     ui.busy(true);
-    try { await unlock(a, pw.value); showFiles(); }
-    catch (e) { console.error(e); msg(a.enc && !/incomplete/.test(e.message) ? 'Wrong password or damaged file.' : e.message, 'bad'); }
+    try { await unlock(a, pw.value, kfBytes); showFiles(); }
+    catch (e) { console.error(e); msg(a.enc && !/incomplete/.test(e.message) ? (a.kf ? 'Wrong password, wrong key file, or damaged file.' : 'Wrong password or damaged file.') : e.message, 'bad'); }
     finally { ui.busy(false); if (a.files) showFiles(); }
   }
+  let kfBytes = null;
+  if (a.kf) q('.kfrow').classList.remove('hide');
+  q('.kbtn').onclick = () => q('.kin').click();
+  q('.kin').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    kfBytes = new Uint8Array(await f.arrayBuffer()); q('.kname').textContent = f.name;
+  };
   if (a.enc) { badge.textContent = 'Locked'; badge.className = 'badge lock'; } else { q('.pwrow').classList.add('hide'); doUnlock(); }
   q('.unl').onclick = doUnlock;
   pw.onkeydown = e => { if (e.key === 'Enter') doUnlock(); };
